@@ -1,0 +1,12 @@
+node_modules
+.env
+.git
+.omc
+.claude
+.DS_Store
+state
+data/cache
+data/stanox.json
+scripts
+test
+*.log

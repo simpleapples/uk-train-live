@@ -1,0 +1,23 @@
+# Live map with Network Rail and TfL data:
+#   docker compose up -d --build
+# Needs NROD_USERNAME and NROD_PASSWORD in .env (see .env.example).
+services:
+  app:
+    build: .
+    image: train-live
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Live data, whatever FEED says in .env (that one is for `npm start`).
+      FEED: nrod
+      STATE_DIR: /app/state
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    volumes:
+      # Timetable, CORPUS and the trains on the map, kept across restarts and upgrades.
+      - state:/app/state
+    # Time to save the trains on the way down.
+    stop_grace_period: 20s
+
+volumes:
+  state:
