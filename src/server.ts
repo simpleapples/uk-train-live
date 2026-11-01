@@ -1,0 +1,191 @@
+// Entry point. FEED=demo (default) runs simulated services; FEED=nrod
+// connects to Network Rail's live TRUST feed.
+
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
+import { createApp } from './app.ts';
+import { LocationIndex, type StanoxTable, type StationTable } from './engine/locations.ts';
+import { PathService } from './engine/paths.ts';
+import type { TrainSource } from './engine/source.ts';
+import { lineLengthM, TrackNetwork, type TrackJson } from './engine/track.ts';
+import { describeTrain } from './engine/trainDetails.ts';
+import { type OperatorNameFn, type StoreState, TrainStore } from './engine/trainStore.ts';
+import { DemoFeed } from './feeds/demoFeed.ts';
+import { OPERATORS } from './feeds/demoNetwork.ts';
+import type { Feed, PlannedStop } from './feeds/feed.ts';
+import { NrodFeed } from './feeds/nrodFeed.ts';
+import { type Credentials, fetchCorpus } from './feeds/nrodFiles.ts';
+import { operatorName as liveOperatorName, TFL_RUN_TOCS } from './feeds/tocCodes.ts';
+import { keepTimetable } from './schedule/keeper.ts';
+import type { Timetable } from './schedule/timetable.ts';
+import { type TflData, TflTracker } from './tfl/tflTracker.ts';
+
+try { process.loadEnvFile(); } catch { /* no .env file */ }
+
+const env = process.env;
+const port = Number(env.PORT ?? 3000);
+const feedKind = env.FEED ?? 'demo';
+// Live mode keeps the downloaded timetable, CORPUS and its trains here, so a
+// restart (or a new container on the same volume) carries on where it was.
+const stateDir = resolve(env.STATE_DIR ?? fileURLToPath(new URL('../state', import.meta.url)));
+const SAVE_EVERY_MS = 30_000;
+
+function loadJson<T>(rel: string, hint: string): T {
+  try {
+    return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')) as T;
+  } catch {
+    console.error(`Missing ${rel.replace('../', '')}. ${hint}`);
+    process.exit(1);
+  }
+}
+
+/** STANOX codes: from `npm run data:corpus`, a previous download, or Network Rail now. */
+async function loadStanox(creds: Credentials): Promise<StanoxTable> {
+  const saved = [fileURLToPath(new URL('../data/stanox.json', import.meta.url)), join(stateDir, 'stanox.json')].find((f) => existsSync(f));
+  if (saved) return JSON.parse(readFileSync(saved, 'utf8')) as StanoxTable;
+  console.log('Downloading CORPUS location codes…');
+  const stanox = await fetchCorpus(creds);
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(join(stateDir, 'stanox.json'), JSON.stringify(stanox));
+  return stanox;
+}
+
+const stations = loadJson<StationTable>('../data/stations.json', 'Run `npm run data:stations` first.');
+
+let feed: Feed;
+let locations: LocationIndex;
+let operatorName: OperatorNameFn = () => undefined;
+let creds: Credentials | null = null;
+
+if (feedKind === 'demo') {
+  locations = LocationIndex.byKey(stations);
+  feed = new DemoFeed(stations);
+  operatorName = (toc) => OPERATORS[toc];
+} else if (feedKind === 'nrod') {
+  if (!env.NROD_USERNAME || !env.NROD_PASSWORD) {
+    console.error('FEED=nrod needs NROD_USERNAME and NROD_PASSWORD (see .env.example).');
+    process.exit(1);
+  }
+  creds = { username: env.NROD_USERNAME, password: env.NROD_PASSWORD };
+  locations = LocationIndex.byStanox(stations, await loadStanox(creds));
+  operatorName = liveOperatorName;
+  feed = new NrodFeed({
+    username: env.NROD_USERNAME,
+    password: env.NROD_PASSWORD,
+    host: env.NROD_HOST,
+    port: env.NROD_PORT ? Number(env.NROD_PORT) : undefined,
+    tls: env.NROD_TLS === 'true',
+    topic: env.NROD_TOPIC,
+  });
+} else {
+  console.error(`Unknown FEED "${feedKind}"; use demo or nrod.`);
+  process.exit(1);
+}
+
+const trackFile = new URL('../data/track.json.gz', import.meta.url);
+let track: TrackNetwork | null = null;
+if (existsSync(trackFile)) {
+  track = TrackNetwork.load(trackFile);
+  const moved = locations.snapTo((lon, lat) => track!.snapPoint([lon, lat], 400));
+  console.log(`Track network: ${track.edgeCount} edges; ${moved}/${locations.size} locations snapped onto track`);
+} else {
+  console.warn('No data/track.json.gz — trains will move in straight lines. Run `npm run data:track`.');
+}
+
+const paths = new PathService(locations, track);
+const trackDistance = (from: string, to: string) => {
+  const line = paths.between(from, to);
+  return line ? lineLengthM(line) : null;
+};
+// TfL rail (Underground, DLR, Overground, Elizabeth line): live from TfL in
+// both modes (TFL=off to disable).
+const tflFile = new URL('../data/tfl.json', import.meta.url);
+const tflOn = env.TFL !== 'off' && existsSync(tflFile);
+// Overground, Elizabeth line and some Tube trains also report to TRUST; show
+// each train once, from TfL.
+const store = new TrainStore(locations, operatorName, trackDistance, tflOn ? TFL_RUN_TOCS : new Set());
+
+const sources: TrainSource[] = [];
+// One path service per TfL line, each on that line's own track.
+const tflPaths = new Map<string, PathService>();
+const TFL_PATH_OPTIONS = { radiusM: 500, maxSnaps: 24, offTrackWeight: 5 };
+if (tflOn) {
+  const tflData = JSON.parse(readFileSync(tflFile, 'utf8')) as TflData;
+  const tflLocations = LocationIndex.byKey(tflData.stations);
+  const tflTrackFile = new URL('../data/tfl-track.json.gz', import.meta.url);
+  const tracks = existsSync(tflTrackFile)
+    ? (JSON.parse(gunzipSync(readFileSync(tflTrackFile)).toString('utf8')) as { lines: Record<string, TrackJson> }).lines
+    : {};
+  for (const lineId of Object.keys(tflData.lines)) {
+    const track = tracks[lineId] ? new TrackNetwork(tracks[lineId]) : null;
+    // Interchanges stack several tracks near one station, so try many; and a
+    // line with tunnel and surface tracks side by side must keep to the one
+    // at the station (Elizabeth line at Whitechapel).
+    tflPaths.set(lineId, new PathService(tflLocations, track, TFL_PATH_OPTIONS));
+  }
+  const missing = Object.keys(tflData.lines).filter((id) => !tracks[id]);
+  sources.push(new TflTracker(tflData, tflLocations, (lineId) => tflPaths.get(lineId)!, { appKey: env.TFL_APP_KEY }));
+  console.log(`TfL: ${Object.keys(tflData.lines).length} lines${missing.length ? ` (straight lines for ${missing.join(', ')})` : ''}`);
+}
+
+// Live mode: each train's schedule (origin, destination, calling points,
+// operator) from the daily timetable, and its trains kept across restarts.
+let timetable: Timetable | null = null;
+let plannedStops: ((id: string) => PlannedStop[] | undefined) | undefined = feed.plannedStops?.bind(feed);
+const stateFile = join(stateDir, 'trains.json');
+const saveState = () => {
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(`${stateFile}.part`, JSON.stringify(store.exportState(Date.now())));
+  renameSync(`${stateFile}.part`, stateFile);
+};
+if (creds) {
+  if (existsSync(stateFile)) {
+    try {
+      const restored = store.importState(JSON.parse(readFileSync(stateFile, 'utf8')) as StoreState, Date.now());
+      console.log(`Restored ${restored} trains from the last run`);
+    } catch (err) {
+      console.warn(`Could not restore trains: ${(err as Error).message}`);
+    }
+  }
+  setInterval(() => {
+    try { saveState(); } catch (err) { console.warn(`Could not save trains: ${(err as Error).message}`); }
+  }, SAVE_EVERY_MS);
+  keepTimetable({
+    creds,
+    file: join(stateDir, 'schedule-full.json.gz'),
+    name: (key) => locations.name(key),
+    onLoad: (t) => {
+      timetable = t;
+      store.setTimetable(t);
+    },
+  });
+  plannedStops = (id) => {
+    const s = store.scheduleOf(id);
+    return s && timetable?.plannedStops(s.uid, s.date);
+  };
+}
+
+const app = createApp({
+  feed,
+  store,
+  sources,
+  publicDir: fileURLToPath(new URL('../public', import.meta.url)),
+  describe: (id) => describeTrain(id, store, locations, paths, plannedStops),
+  path: (from, to, line) => (line ? tflPaths.get(line) : paths)?.between(from, to) ?? null,
+});
+
+app.server.listen(port, () => {
+  console.log(`train-live (${feedKind}) on http://localhost:${port} — ${locations.size} mapped locations`);
+});
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    if (creds) {
+      try { saveState(); } catch { /* best effort on the way out */ }
+    }
+    app.close();
+    process.exit(0);
+  });
+}
