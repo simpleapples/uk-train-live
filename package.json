@@ -1,0 +1,35 @@
+{
+  "name": "uk-train-live",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Every train in Great Britain on one live map: National Rail from Network Rail open data, plus the Tube, Overground, Elizabeth line and DLR from TfL",
+  "keywords": ["trains", "railway", "live-map", "network-rail", "tfl", "london-underground", "maplibre", "open-data", "uk"],
+  "homepage": "https://github.com/simpleapples/uk-train-live#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simpleapples/uk-train-live.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "demo": "FEED=demo node src/server.ts",
+    "live": "FEED=nrod node src/server.ts",
+    "data:stations": "node scripts/build-stations.ts",
+    "data:corpus": "node scripts/fetch-corpus.ts",
+    "data:track": "node --max-old-space-size=6144 scripts/build-track.ts",
+    "data:tfl": "node scripts/build-tfl.ts",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@mapbox/vector-tile": "^2.0.5",
+    "@types/node": "^24.3.0",
+    "pbf": "^4.0.2",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

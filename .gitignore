@@ -1,0 +1,10 @@
+node_modules/
+.env
+data/stanox.json
+data/cache/
+.omc/
+.DS_Store
+state/
+.claude/
+*.log
+*.part
