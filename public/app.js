@@ -147,7 +147,7 @@ function textOn(hex) {
 }
 
 function badgeHtml(b, size = '') {
-  return `<span class="lb${size ? ` ${size}` : ''}" style="background:${escapeHtml(b.color)};color:${textOn(b.color)}" title="${escapeHtml(b.name)}">${escapeHtml(b.code)}</span>`;
+  return `<span class="lb${size ? ` ${size}` : ''}" style="background:${escapeHtml(b.color)};color:${textOn(b.color)}" data-tip="${escapeHtml(b.name)}">${escapeHtml(b.code)}</span>`;
 }
 
 /** Whether the train's network, and its line or operator, are switched on. */
@@ -1156,12 +1156,45 @@ function showTooltip(id, event) {
     return;
   }
   const late = !t.mode && t.delayMin > 0 ? ` · +${t.delayMin} min` : '';
-  tip.innerHTML = `<div class="tt-title">${shortHtml(t)}${escapeHtml(late)}</div><span class="tt-sub">${escapeHtml(whereLabel(t))}</span>`;
+  // The full name behind the badge's code.
+  const b = badgeOf(t);
+  const who = b.name !== b.code ? `${b.name} · ` : '';
+  tip.innerHTML = `<div class="tt-title">${shortHtml(t)}${escapeHtml(late)}</div><span class="tt-sub">${escapeHtml(who + whereLabel(t))}</span>`;
   tip.hidden = false;
   const x = Math.min(event.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
   const y = Math.min(event.clientY + 14, window.innerHeight - tip.offsetHeight - 8);
   tip.style.left = `${x}px`;
   tip.style.top = `${y}px`;
+}
+
+// Badges show the full name behind their code at once, under the badge. The
+// browser's own title attribute takes a second or two to appear.
+document.addEventListener('mouseover', (e) => {
+  const tip = $('tooltip');
+  // A line's button says more than the badge inside it (its disruption).
+  const el = e.target.closest?.('.lf-btn[data-tip]') ?? e.target.closest?.('[data-tip]');
+  if (!el) {
+    if (tip.dataset.badge) {
+      tip.hidden = true;
+      delete tip.dataset.badge;
+    }
+    return;
+  }
+  tip.textContent = el.dataset.tip;
+  tip.dataset.badge = 'true';
+  tip.hidden = false;
+  const r = el.getBoundingClientRect();
+  tip.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - tip.offsetWidth - 8))}px`;
+  tip.style.top = `${r.bottom + tip.offsetHeight + 12 > window.innerHeight ? r.top - tip.offsetHeight - 6 : r.bottom + 6}px`;
+});
+// Whatever it was over may be redrawn or scrolled away.
+for (const type of ['click', 'scroll']) {
+  document.addEventListener(type, () => {
+    const tip = $('tooltip');
+    if (!tip.dataset.badge) return;
+    tip.hidden = true;
+    delete tip.dataset.badge;
+  }, { capture: true, passive: true });
 }
 
 // ---- Network and line filter ----
@@ -1227,7 +1260,7 @@ function renderFilters() {
         const status = b.key.startsWith('tfl:') ? disrupted[b.key.slice(4)] : null;
         const flag = status ? `<span class="flag${status.closed ? ' closed' : ''}"></span>` : '';
         const label = `${b.name}${status ? ` (${status.summary})` : ''}`;
-        return `<button type="button" class="lf-btn" data-focus="line:${escapeHtml(b.key)}" data-key="${escapeHtml(b.key)}" aria-pressed="${on && !hiddenLines.has(b.key)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${badgeHtml(b)}${flag}</button>`;
+        return `<button type="button" class="lf-btn" data-focus="line:${escapeHtml(b.key)}" data-key="${escapeHtml(b.key)}" aria-pressed="${on && !hiddenLines.has(b.key)}" aria-label="${escapeHtml(label)}" data-tip="${escapeHtml(label)}">${badgeHtml(b)}${flag}</button>`;
       }).join('') : '';
       return `<div class="net-lines">${badges}</div>`;
     };
