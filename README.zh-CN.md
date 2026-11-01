@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/logo.svg" width="96" height="96" alt="UK Live Trains logo">
+<img src="public/logo.svg" width="96" height="96" alt="UK Live Trains logo">
 
 # UK Live Trains
 
