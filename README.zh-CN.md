@@ -33,6 +33,7 @@
 - 🧭 **方向和准点一眼看清。** 每个圆点里有一个箭头指向行驶方向。国铁按晚点着色，TfL 用线路颜色。
 - 🗺️ **点一下就有整条路线。** 起点 → 终点，以及每个停靠站的计划、实际和预计时间，来自 Network Rail 的每日时刻表。列车走过的轨道会在它身后变浅。
 - 🚄 **这是什么车。** 车型和名字（Class 390 Pendolino、Class 800 Azuma）、最高速度、有没有一等座、餐饮和卧铺，都从时刻表里读出来。
+- 👥 **地铁有多挤。** 地铁、Overground、DLR 和 Elizabeth line 的列车会显示车型，以及这个区间在这个时段通常有多满，来自 TfL 的 NUMBAT 模型（TfL 没有公开实时的列车载客数据）。
 - 🚦 **内置线路状态。** TfL 的停运和延误会标在对应线路上，地图上某条线没车时能看到原因（比如 "Piccadilly：计划停运"）。
 - 🔎 **搜索和筛选。** 按车次号、线路、运营公司或目的地找车。网络、线路、运营公司可以任意组合显示，比如"只看 Central line 和 LNER"。
 - ⚡ **快而轻。** 一条 Server-Sent Events 推送流，每秒推增量；全程 gzip；轨道几何批量取。服务器重启后列车还在。
@@ -68,7 +69,7 @@ Demo 模式不需要账号。国铁是**模拟**的（28 个班次、约 200 列
 
 ### 🔴 接入真实国铁数据
 
-1. 在 [Network Rail Open Data](https://publicdatafeeds.networkrail.co.uk) 免费注册。订阅在 [My Feeds](https://publicdatafeeds.networkrail.co.uk/ntrod/myFeeds) 页面。名额上限 1000 人，先到先得。
+1. 在 [Network Rail Open Data](https://publicdatafeeds.networkrail.co.uk) 免费注册。在 [My Feeds](https://publicdatafeeds.networkrail.co.uk/ntrod/myFeeds) 页面订阅列车运行（全部运营公司）、SCHEDULE 和 VSTP。名额上限 1000 人，先到先得。
 2. 复制 `.env.example` 为 `.env`，填入 `NROD_USERNAME` 和 `NROD_PASSWORD`。
 3. 运行：
 
@@ -99,7 +100,9 @@ docker compose up -d --build
 flowchart LR
   TRUST["Network Rail TRUST<br/>列车运行报告 (STOMP)"] --> Store[TrainStore]
   SCHEDULE["每日时刻表<br/>(SCHEDULE 全量)"] --> Timetable --> Store
+  VSTP["临时时刻表<br/>(VSTP, STOMP)"] --> Timetable
   TfLAPI["TfL Unified API<br/>到站预测 + 线路状态"] --> Tracker[TflTracker]
+  NUMBAT[("TfL NUMBAT<br/>典型载客量")] --> Tracker
   OSM[("OpenStreetMap<br/>铁路图")] --> Paths["A* 轨道路径"]
   Store --> Server["HTTP + SSE"]
   Tracker --> Server
@@ -108,7 +111,7 @@ flowchart LR
 ```
 
 - **没有任何公开数据提供 GPS 位置。** Network Rail 的 TRUST 数据在列车经过计时点时发一条报告：什么时候、晚了多少、下一个计时点是哪、还要几分钟。服务器给每列车保存一个"区间"（从哪、到哪、出发时间、运行时间），浏览器取两点之间的轨道，让列车沿轨道滑过去。所以服务器只推送变化，不推送位置。
-- **每列车对上它的时刻表。** Live 模式读取 Network Rail 每日完整时刻表，只保留今天运行的约 2.5 万个班次（内存约 15 MB）。用激活消息里的班次编号对；服务器启动前就在跑的车，用"车次号 + 地点 + 计划时间"来对。约 93% 的列车能对上，对不上的主要是当天临时加开的车。
+- **每列车对上它的时刻表。** Live 模式读取 Network Rail 每日完整时刻表，只保留今天运行的约 2.5 万个班次（内存约 15 MB）。用激活消息里的班次编号对；服务器启动前就在跑的车，用"车次号 + 地点 + 计划时间"来对。临时制定的班次（工程车、加开的货运车）从 VSTP 数据流实时并入，重启后也会保留。
 - **TfL 给的是预测，不是位置。** Unified API 告诉我们每列车到后面各站还要几秒。上一站按线路站序推出，速度从各站预测的时间差算出，位置看区间还剩多少。DLR 预测没有车号，所以从各站的预测反推出列车。
 - **轨道几何来自 OpenStreetMap。** 全国路网来自 OpenFreeMap 矢量瓦片，TfL 线路来自 OSM 路线关系，每条线一张图。道岔连接按"线头 25 米内有其他线就连上"重建。
 
@@ -140,6 +143,7 @@ flowchart LR
 npm run data:stations   # NaPTAN 车站 → data/stations.json
 npm run data:track      # 从 OpenFreeMap 瓦片提取 OSM 铁路图 → data/track.json.gz
 npm run data:tfl        # TfL 线路、车站和每条线的轨道 → data/tfl*.json*
+npm run data:tfl-loads  # TfL 列车典型载客量（NUMBAT） → data/tfl-loads.json.gz
 ```
 
 </details>
@@ -149,12 +153,12 @@ npm run data:tfl        # TfL 线路、车站和每条线的轨道 → data/tfl*
 - **位置是估算的**：沿轨道在两次报告之间插值，不是 GPS。
 - **TRUST 只在计时点报告**，计时点之间可能隔好几公里。没有坐标的道岔，从上一个已知车站接着走。
 - **速度是区间平均值**：估算值来自时刻表或 TfL 预测，实测值来自两次报告之间，不是瞬时速度。
-- **当天临时加开的车**（VSTP）不在每日时刻表里，只显示"From 某站"，没有完整路线。
+- **TfL 的拥挤程度是典型值，不是实时的。** 来自 TfL 的 NUMBAT 模型，按区间和每 15 分钟统计的平均日。
 - **OpenRailwayMap 的公共瓦片**只适合原型，访问量大的公开网站应该自建。
 
 ## 🛣️ 路线图
 
-- [ ] 接入 VSTP，覆盖当天临时加开的车
+- [x] 接入 VSTP，覆盖当天临时加开的车
 - [ ] 接入 TD（Train Describer），按区域做到信号区段级精度
 - [ ] 接入 Darwin：预测晚点、站台和取消
 - [ ] 只推送视野内的列车
@@ -180,6 +184,7 @@ npm run typecheck
 |---|---|---|
 | 列车运行、时刻表、CORPUS | [Network Rail Open Data](https://publicdatafeeds.networkrail.co.uk) | Network Rail 数据许可：*"Contains information of Network Rail Infrastructure Limited licensed under the Network Rail data feeds licence."* 不使用 Network Rail、National Rail 和各火车公司的 logo，运营公司用文字小标表示。 |
 | 地铁、Overground、Elizabeth line、DLR | [TfL Unified API](https://api-portal.tfl.gov.uk) | *Powered by TfL Open Data.* 含 OS 数据 © Crown copyright and database rights。 |
+| 列车典型载客量（`data/tfl-loads.json.gz`） | [TfL NUMBAT](https://crowding.data.tfl.gov.uk) | *Powered by TfL Open Data.* |
 | 车站坐标（`data/stations.json`） | NaPTAN（英国交通部） | Open Government Licence v3.0 |
 | 轨道几何（`data/track.json.gz`、`data/tfl-track.json.gz`） | © [OpenStreetMap](https://www.openstreetmap.org/copyright) 贡献者，经 [OpenFreeMap](https://openfreemap.org) / OpenMapTiles 和 Overpass | [ODbL](https://opendatacommons.org/licenses/odbl/) |
 | 底图和铁路图层 | [OpenFreeMap](https://openfreemap.org)、[OpenRailwayMap](https://www.openrailwaymap.org) | © OpenMapTiles © OpenStreetMap 贡献者；CC-BY-SA |

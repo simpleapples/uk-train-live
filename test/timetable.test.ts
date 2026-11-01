@@ -70,6 +70,45 @@ describe('Timetable', () => {
     expect(t.byUid('C10001', DAY)?.service).toEqual({ power: 'EMU', timingLoad: '800', speed: '125', seating: 'B', catering: 'T' });
   });
 
+  describe('short-notice schedules (VSTP)', () => {
+    // Kings Cross 13:00:00 -> Stevenage, through Wymondley Jn at 13:15:30, a light engine.
+    const vstp = (transaction = 'Create') => ({
+      transaction_type: transaction,
+      CIF_train_uid: ' 43876',
+      CIF_stp_indicator: 'N',
+      schedule_start_date: DAY,
+      schedule_end_date: DAY,
+      schedule_days_runs: '0000010',
+      schedule_segment: [{
+        signalling_id: '0Z99',
+        atoc_code: '',
+        CIF_power_type: 'D',
+        CIF_timing_load: '',
+        schedule_location: [
+          { scheduled_departure_time: '130000', public_departure_time: ' ', location: { tiploc: { tiploc_id: 'KNGX' } } },
+          { scheduled_pass_time: '131530', location: { tiploc: { tiploc_id: 'WYMONDJ' } } },
+          { scheduled_arrival_time: '132000', location: { tiploc: { tiploc_id: 'STEVNGE' } } },
+        ],
+      }],
+    });
+
+    it('adds a schedule made after the extract, with VSTP times and places', async () => {
+      const t = await load([schedule({ uid: 'C10001', locs: LNER_LOCS })]);
+      expect(t.addVstp(vstp())).toBe(1);
+      expect(t.byUid('43876', DAY)).toMatchObject({ uid: '43876', atoc: 'ZZ', origin: 'London Kings Cross', destination: 'Stevenage', service: { power: 'D' } });
+      expect(t.match('0Z99', '86099', NOON + 75 * MIN + 30_000)?.uid).toBe('43876');
+      expect(t.plannedStops('43876', DAY)?.map((s) => [s.key, s.call])).toEqual([['87701', true], ['86099', false], ['86021', true]]);
+    });
+
+    it('removes one again when it is deleted', async () => {
+      const t = await load([]);
+      t.addVstp(vstp());
+      expect(t.addVstp(vstp('Delete'))).toBe(1);
+      expect(t.byUid('43876', DAY)).toBeUndefined();
+      expect(t.match('0Z99', '87701', NOON + 60 * MIN)).toBeUndefined();
+    });
+  });
+
   it('finds a train first seen mid-journey by headcode, place and planned time', async () => {
     const t = await load([schedule({ uid: 'C10001', locs: LNER_LOCS }), schedule({ uid: 'C10002', headcode: '1S12', locs: LNER_LOCS.map((l) => ({ ...l, dep: l.dep?.replace('12', '14'), arr: l.arr?.replace('12', '14'), pass: l.pass?.replace('12', '14') })) })]);
     expect(t.match('1S12', '86021', NOON + 20 * MIN)?.uid).toBe('C10001');

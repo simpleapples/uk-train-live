@@ -20,6 +20,8 @@ import type { TrainSource } from '../engine/source.ts';
 import { distanceM, lineLengthM, type LonLat } from '../engine/track.ts';
 import type { StopDetail, TrainDetails } from '../engine/trainDetails.ts';
 import type { TrainChanges, TrainView } from '../engine/trainStore.ts';
+import type { TflLoads } from './loads.ts';
+import { tflStock } from './stock.ts';
 
 export type TflMode = 'tube' | 'dlr' | 'overground' | 'elizabeth-line';
 
@@ -54,6 +56,8 @@ export interface TflOptions {
   statusPollMs?: number;
   appKey?: string;
   fetch?: typeof fetch;
+  /** Typical train loads, for how busy a train usually is. */
+  loads?: TflLoads | null;
 }
 
 interface TflTrain {
@@ -275,6 +279,9 @@ export class TflTracker implements TrainSource {
       next: stops.find((s) => s.status === 'upcoming'),
       pathBehind,
       pathAhead,
+      service: tflStock(view.line!),
+      // The section it is on, or about to leave.
+      load: this.#opts.loads?.estimate(view.line!, view.from.key, view.to?.key ?? route[here + 1] ?? '', Date.now()),
     };
   }
 

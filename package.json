@@ -22,6 +22,7 @@
     "data:corpus": "node scripts/fetch-corpus.ts",
     "data:track": "node --max-old-space-size=6144 scripts/build-track.ts",
     "data:tfl": "node scripts/build-tfl.ts",
+    "data:tfl-loads": "node scripts/build-tfl-loads.ts",
     "typecheck": "tsc",
     "test": "vitest run"
   },

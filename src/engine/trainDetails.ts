@@ -4,6 +4,7 @@
 
 import type { PlannedStop } from '../feeds/feed.ts';
 import { describeService, type ServiceDetails } from '../schedule/service.ts';
+import type { TrainLoad } from '../tfl/loads.ts';
 import type { LocationIndex } from './locations.ts';
 import type { PathService } from './paths.ts';
 import type { LonLat } from './track.ts';
@@ -40,6 +41,8 @@ export interface TrainDetails {
   pathAhead: LonLat[];
   /** Train type and facilities, from its schedule. */
   service?: ServiceDetails;
+  /** How busy the train usually is here at this time (TfL lines). */
+  load?: TrainLoad;
 }
 
 export function describeTrain(

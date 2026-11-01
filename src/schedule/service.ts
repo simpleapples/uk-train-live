@@ -9,8 +9,10 @@ export interface ServiceDetails {
   /** "Class 390 Pendolino", or the kind of train when the class is unknown. */
   stock?: string;
   /** What to draw: a high-speed train, a multiple unit, or a locomotive and what it hauls. */
-  kind?: 'high-speed' | 'unit' | 'loco';
+  kind?: 'high-speed' | 'unit' | 'loco' | 'tube';
   traction?: 'electric' | 'diesel';
+  /** Electric from a third (or fourth) rail only: no pantograph. */
+  thirdRail?: boolean;
   /** Timetabled maximum speed. */
   maxMph?: number;
   /** Planned trailing load of a locomotive-hauled train. */
@@ -18,7 +20,7 @@ export interface ServiceDetails {
   features: Feature[];
 }
 
-export type FeatureId = 'first' | 'sleeper' | 'buffet' | 'trolley' | 'hot-food' | 'restaurant' | 'meal' | 'reservations' | 'bike';
+export type FeatureId = 'first' | 'sleeper' | 'buffet' | 'trolley' | 'hot-food' | 'restaurant' | 'meal' | 'reservations' | 'bike' | 'air-con';
 export interface Feature {
   id: FeatureId;
   label: string;
@@ -74,6 +76,8 @@ const RESERVATIONS: Record<string, Feature> = {
   E: { id: 'bike', label: 'Bike reservations required' },
 };
 
+// Electric units that only pick up from a third rail (Southern region, Merseyrail, Island Line).
+const THIRD_RAIL = /^(375|376|377|444|450|455|456|458|465|466|483|484|507|508|701|707|777)$/;
 // Classes drawn with a streamlined nose.
 const HIGH_SPEED = /^(220|221|222|373|374|390|395|80\d|810|220\/221)$/;
 
@@ -92,6 +96,7 @@ export function describeService(info: ScheduleInfo | undefined): ServiceDetails 
     stock: cls ? classLabel(cls, info.atoc) : c.power && POWER[c.power],
     kind: c.power === 'HST' || (cls && HIGH_SPEED.test(cls)) ? 'high-speed' : hauled || c.power === 'EML' ? 'loco' : c.power ? 'unit' : undefined,
     traction: c.power === 'E' || c.power === 'EMU' || c.power === 'EML' ? 'electric' : c.power ? 'diesel' : undefined,
+    thirdRail: cls && THIRD_RAIL.test(cls) ? true : undefined,
     maxMph: Number(c.speed) || undefined,
     tonnes: hauled ? Number(c.timingLoad) || undefined : undefined,
     features,

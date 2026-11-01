@@ -33,6 +33,7 @@ Trains glide along the real track, each with its whole route, next stop, delay a
 - 🧭 **Direction and punctuality at a glance.** Every dot carries an arrow for its direction of travel. National Rail trains are coloured by lateness; TfL trains in their line colour.
 - 🗺️ **The whole route, one click away.** Origin → destination, then every calling point with planned, actual and expected times, from Network Rail's daily timetable. The track the train has covered fades out behind it as it moves.
 - 🚄 **What the train is.** Its class and name (Class 390 Pendolino, Class 800 Azuma), top speed, first class, catering and sleepers, read from the timetable.
+- 👥 **How busy the Tube is.** Tube, Overground, DLR and Elizabeth line trains show their rolling stock and how full they usually are on that section at that time, from TfL's NUMBAT model. (TfL publishes no live train loading.)
 - 🚦 **Line status built in.** TfL closures and delays are flagged on each line, so a quiet line explains itself (e.g. "Piccadilly: Planned Closure").
 - 🔎 **Search and filter.** Find a train by headcode, line, operator or destination. Show any mix of networks, lines and operators, like "only the Central line and LNER".
 - ⚡ **Fast and light.** One Server-Sent Events stream with one-second deltas, gzip throughout, and batched track geometry. Trains survive server restarts.
@@ -68,7 +69,7 @@ Demo mode needs no account. It **simulates** National Rail (about 200 trains on 
 
 ### 🔴 Live National Rail data
 
-1. Register (free) at [Network Rail Open Data](https://publicdatafeeds.networkrail.co.uk). Feed subscriptions are on the [My Feeds](https://publicdatafeeds.networkrail.co.uk/ntrod/myFeeds) page. The service is limited to 1,000 users, first come first served.
+1. Register (free) at [Network Rail Open Data](https://publicdatafeeds.networkrail.co.uk). On the [My Feeds](https://publicdatafeeds.networkrail.co.uk/ntrod/myFeeds) page, subscribe to train movements (all TOCs), SCHEDULE and VSTP. The service is limited to 1,000 users, first come first served.
 2. Copy `.env.example` to `.env` and fill in `NROD_USERNAME` and `NROD_PASSWORD`.
 3. Run:
 
@@ -97,7 +98,9 @@ docker compose up -d --build
 flowchart LR
   TRUST["Network Rail TRUST<br/>train movements (STOMP)"] --> Store[TrainStore]
   SCHEDULE["Daily timetable<br/>(SCHEDULE extract)"] --> Timetable --> Store
+  VSTP["Short-notice schedules<br/>(VSTP, STOMP)"] --> Timetable
   TfLAPI["TfL Unified API<br/>arrivals + line status"] --> Tracker[TflTracker]
+  NUMBAT[("TfL NUMBAT<br/>typical train loads")] --> Tracker
   OSM[("Rail graph from<br/>OpenStreetMap")] --> Paths["A* track paths"]
   Store --> Server["HTTP + SSE"]
   Tracker --> Server
@@ -106,7 +109,7 @@ flowchart LR
 ```
 
 - **No public feed gives GPS positions.** Network Rail's TRUST feed reports a train each time it passes a timing point: when, how late, which timing point is next, and how many minutes away. The server keeps one *segment* per train (from, to, departure time, running time). The browser fetches the track between the two points and slides the train along it, so the server pushes changes, not positions.
-- **Each train is matched to its schedule.** Live mode reads Network Rail's daily full timetable extract and keeps only today's ~25,000 schedules (about 15 MB in memory). A train is matched by the schedule id in its activation message; a train already running when the server starts is matched by headcode, place and planned time. About 93% of trains match. The rest are mostly same-day extras.
+- **Each train is matched to its schedule.** Live mode reads Network Rail's daily full timetable extract and keeps only today's ~25,000 schedules (about 15 MB in memory). A train is matched by the schedule id in its activation message; a train already running when the server starts is matched by headcode, place and planned time. Schedules made at short notice (engineering trains, extra freight) arrive on the VSTP feed and are merged in as they come, and kept across restarts.
 - **TfL gives predictions, not positions.** For each train the Unified API says how many seconds it is from each upcoming station. The previous station comes from the line's station order. The speed comes from the gaps between predictions, and the position from how much of the section is left. DLR predictions carry no train numbers, so DLR trains are inferred from per-station predictions.
 - **Track geometry is built from OpenStreetMap.** The national network comes from OpenFreeMap vector tiles, and TfL lines from OSM route relations, one graph per line. Junctions are rebuilt by joining line ends within 25 m.
 
@@ -138,6 +141,7 @@ The built data is committed in `data/`. To rebuild it (needs `npm install` for t
 npm run data:stations   # NaPTAN stations → data/stations.json
 npm run data:track      # OSM rail graph from OpenFreeMap tiles → data/track.json.gz
 npm run data:tfl        # TfL lines, stations and per-line track → data/tfl*.json*
+npm run data:tfl-loads  # typical TfL train loads (NUMBAT) → data/tfl-loads.json.gz
 ```
 
 </details>
@@ -147,12 +151,12 @@ npm run data:tfl        # TfL lines, stations and per-line track → data/tfl*.j
 - **Positions are estimates**, interpolated between reports along the track. They are not GPS.
 - **TRUST only reports at timing points**, which can be several kilometres apart. Junctions without coordinates are bridged from the last known station.
 - **Speeds are section averages**: estimated from the timetable or TfL predictions, and measured between reports. They are not instantaneous.
-- **Same-day extra trains** (VSTP) aren't in the daily timetable, so they show "From X" instead of a full route.
+- **TfL crowding is typical, not live.** It comes from TfL's NUMBAT model of an average day, per section and quarter hour.
 - **OpenRailwayMap's public tiles** are fine for a prototype. A busy public site should host its own.
 
 ## 🛣️ Roadmap
 
-- [ ] VSTP feed, for same-day extra trains
+- [x] VSTP feed, for same-day extra trains
 - [ ] TD (Train Describer) for signal-berth precision, one area at a time
 - [ ] Darwin, for predicted delays, platforms and cancellations
 - [ ] Only send trains in the viewport
@@ -178,6 +182,7 @@ The code is [MIT](LICENSE). The data it uses comes with its own terms, and the a
 |---|---|---|
 | Train movements, timetable, CORPUS | [Network Rail Open Data](https://publicdatafeeds.networkrail.co.uk) | Network Rail data feeds licence: *"Contains information of Network Rail Infrastructure Limited licensed under the Network Rail data feeds licence."* No Network Rail, National Rail or train company logos; operators are shown as text badges. |
 | Tube, Overground, Elizabeth line, DLR | [TfL Unified API](https://api-portal.tfl.gov.uk) | *Powered by TfL Open Data.* Contains OS data © Crown copyright and database rights. |
+| Typical train loads (`data/tfl-loads.json.gz`) | [TfL NUMBAT](https://crowding.data.tfl.gov.uk) | *Powered by TfL Open Data.* |
 | Station locations (`data/stations.json`) | NaPTAN, Department for Transport | Open Government Licence v3.0 |
 | Track geometry (`data/track.json.gz`, `data/tfl-track.json.gz`) | © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, via [OpenFreeMap](https://openfreemap.org) / OpenMapTiles and Overpass | [ODbL](https://opendatacommons.org/licenses/odbl/) |
 | Basemap and rail overlay | [OpenFreeMap](https://openfreemap.org), [OpenRailwayMap](https://www.openrailwaymap.org) | © OpenMapTiles © OpenStreetMap contributors; CC-BY-SA |

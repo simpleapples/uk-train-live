@@ -61,6 +61,9 @@ describe('describeService', () => {
     expect(kind('XC', { power: 'DMU', timingLoad: 'V' })).toBe('high-speed diesel');
     expect(kind('SR', { power: 'HST' })).toBe('high-speed diesel');
     expect(kind('CS', { power: 'E' })).toBe('loco electric');
+    // Third rail only: drawn without a pantograph.
+    expect(describeService(info('SW', { power: 'EMU', timingLoad: '701' }))?.thirdRail).toBe(true);
+    expect(describeService(info('TL', { power: 'EMU', timingLoad: '700' }))?.thirdRail).toBeUndefined();
   });
 
   it('says nothing without codes', () => {

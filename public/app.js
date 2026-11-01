@@ -301,7 +301,7 @@ const coach = (x, w) => `<rect x="${x}" y="7" width="${w}" height="12" rx="2"/><
 
 /** Front to the right; drawn in the operator's colour. 112 x 26. */
 function trainArt(s, freight) {
-  const electric = s.traction === 'electric';
+  const electric = s.traction === 'electric' && !s.thirdRail;
   if (s.kind === 'loco') {
     const loco = `<path d="M66 6h37a3 3 0 0 1 3 3v10H66z"/><rect x="101.5" y="8.5" width="3" height="4" rx=".8" ${WHITE}/>`
       + `<rect x="67.5" y="8.5" width="3" height="4" rx=".8" ${WHITE}/><rect x="74" y="9" width="22" height="2" rx="1" fill="#fff" fill-opacity=".3"/>`
@@ -310,6 +310,12 @@ function trainArt(s, freight) {
       ? [2, 34].map((x) => `<rect x="${x}" y="16" width="29" height="3" fill="#475467"/><rect x="${x + 2}" y="9" width="25" height="7" rx="1" fill="#98a2b3"/>`).join('') + wheels([7, 26, 39, 58])
       : coach(2, 29) + coach(34, 29) + wheels([7, 26, 39, 58]);
     return hauled + loco;
+  }
+  if (s.kind === 'tube') {
+    // Deep-level Tube trains: the round-topped profile of the tunnels they run in.
+    return `<path d="M2 19v-6.5C2 9.5 5 7 9 7h36c4 0 7 2.5 7 5.5V19z"/><rect x="7" y="10" width="40" height="3.2" rx="1" ${WHITE}/>`
+      + `<path d="M55 19v-6.5c0-3 3-5.5 7-5.5h38c3.5 0 6 2.8 6 6v6z"/><rect x="60" y="10" width="37" height="3.2" rx="1" ${WHITE}/><rect x="101.5" y="9.5" width="3" height="4" rx=".8" ${WHITE}/>`
+      + wheels([9, 15, 39, 45, 62, 68, 92, 98]);
   }
   const lead = s.kind === 'high-speed'
     ? `<path d="M55 7h33c8 0 15 4 20 10v2H55z"/><rect x="59" y="10" width="27" height="3.2" rx="1" ${WHITE}/><path d="M92 9.2c4.3.9 8 3.2 10.6 6.3H96z" ${WHITE}/>`
@@ -324,9 +330,10 @@ const FACILITY_ICONS = {
   cutlery: 'M4.5 2v4a1.5 1.5 0 0 0 3 0V2M6 6v8M11.5 14V2c-1.7 1-2.5 3-2.5 5.5 0 1 .5 1.5 1.5 1.5h1',
   bed: 'M1.5 12.5V4M1.5 9.5h13v3M14.5 9.5v-1a2 2 0 0 0-2-2H7v3M4.25 6.25a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5',
   ticket: 'M2 4h12v2.5a1.5 1.5 0 0 0 0 3V12H2V9.5a1.5 1.5 0 0 0 0-3zM9.5 4.5v1.5M9.5 7.25v1.5M9.5 10v1.5',
+  snow: 'M8 1.5v13M2.4 4.75l11.2 6.5M2.4 11.25l11.2-6.5M6.2 2.6 8 4l1.8-1.4M6.2 13.4 8 12l1.8 1.4',
   bike: 'M4 13.25a2.75 2.75 0 1 1 0-5.5 2.75 2.75 0 0 1 0 5.5M12 13.25a2.75 2.75 0 1 1 0-5.5 2.75 2.75 0 0 1 0 5.5M4 10.5 6.5 6h4.5l1 4.5M6.5 6l2 4.5L11 6M5.5 4.5h2',
 };
-const ICON_OF = { buffet: 'cup', trolley: 'cup', 'hot-food': 'cup', restaurant: 'cutlery', meal: 'cutlery', sleeper: 'bed', reservations: 'ticket', bike: 'bike' };
+const ICON_OF = { buffet: 'cup', trolley: 'cup', 'hot-food': 'cup', restaurant: 'cutlery', meal: 'cutlery', sleeper: 'bed', reservations: 'ticket', bike: 'bike', 'air-con': 'snow' };
 
 function facilitiesHtml(features) {
   const icons = new Map(); // icon -> labels, so a buffet and a trolley share one cup
@@ -569,16 +576,27 @@ function speedOf(t) {
   return t.measuredKmh ? { text: `${t.measuredKmh} km/h`, tip: measured } : null;
 }
 
+const LOAD_COLORS = ['#1a9e6f', '#86b41f', '#f79009', '#d9412b'];
+
+/** How busy the train usually is here: four bars, then the word and a head count. */
+function loadHtml(load) {
+  if (!load) return '';
+  const bars = [0, 1, 2, 3].map((i) => `<s style="height:${4 + i * 2}px${i <= load.level ? `;background:${LOAD_COLORS[load.level]}` : ''}"></s>`).join('');
+  const tip = escapeHtml(`About ${load.people} people on board. ${load.basis}.`);
+  return `<span class="co-load" title="${tip}"><em class="meter">${bars}</em>${load.label} · ~${load.people.toLocaleString('en-GB')} people</span>`;
+}
+
 function calloutHtml(t, d, now) {
   if (t.state === 'terminated') return `<b>Terminated</b><span>${escapeHtml(t.from.name)}</span>`;
-  if (t.state === 'stopped') return `<b>Standing</b><span>${escapeHtml((d?.current ?? d?.previous)?.name ?? t.from.name)}</span>`;
+  if (t.state === 'stopped') return `<b>Standing</b><span>${escapeHtml((d?.current ?? d?.previous)?.name ?? t.from.name)}</span>${loadHtml(d?.load)}`;
   const tfl = Boolean(t.mode);
   const speed = speedOf(t);
   const next = d?.next?.name ?? t.to?.name;
   const exp = d?.next && expectedOf(d.next, t.delayMin);
   const when = exp ? (tfl ? `${minutesUntil(exp, now)} min` : hhmm(exp)) : '';
   return (speed ? `<b title="${escapeHtml(speed.tip)}">${speed.text}</b>` : '')
-    + (next ? `<span>→ ${escapeHtml(next)}${when ? ` <i${!tfl && t.delayMin > 0 ? ' class="late"' : ''}>${when}</i>` : ''}</span>` : '');
+    + (next ? `<span>→ ${escapeHtml(next)}${when ? ` <i${!tfl && t.delayMin > 0 ? ' class="late"' : ''}>${when}</i>` : ''}</span>` : '')
+    + loadHtml(d?.load);
 }
 
 function renderCallout(t, now) {

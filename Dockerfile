@@ -12,7 +12,7 @@ COPY src ./src
 COPY public ./public
 # Built map data (stations, track, TfL lines). CORPUS and the timetable are
 # downloaded at runtime into the state volume, with the NROD account.
-COPY data/stations.json data/track.json.gz data/tfl.json data/tfl-track.json.gz ./data/
+COPY data/stations.json data/track.json.gz data/tfl.json data/tfl-track.json.gz data/tfl-loads.json.gz ./data/
 
 RUN mkdir -p /app/state && chown node:node /app/state
 USER node

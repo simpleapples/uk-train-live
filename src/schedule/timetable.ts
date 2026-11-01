@@ -40,6 +40,8 @@ interface Schedule {
   date: string;
   headcode: string;
   atoc: string;
+  /** STP_RANK of the schedule kept, so a VSTP overlay can tell whether it wins. */
+  rank: number;
   service?: ServiceCodes;
   /** Per location, STRIDE ints: key index, arrival, departure, pass (half-minutes after the date's midnight, -1 if none), calls (1/0). */
   stops: Int32Array;
@@ -84,6 +86,35 @@ interface CifSchedule {
   };
 }
 
+/** A schedule from the VSTP feed: like the extract's, but times are HHMMSS and places nest deeper. */
+export interface VstpSchedule {
+  transaction_type?: string;
+  CIF_train_uid: string;
+  CIF_stp_indicator: string;
+  schedule_start_date: string;
+  schedule_end_date: string;
+  schedule_days_runs?: string;
+  schedule_segment?: Array<{
+    signalling_id?: string | null;
+    atoc_code?: string | null;
+    CIF_power_type?: string | null;
+    CIF_timing_load?: string | null;
+    CIF_speed?: string | null;
+    CIF_train_class?: string | null;
+    CIF_sleepers?: string | null;
+    CIF_reservations?: string | null;
+    CIF_catering_code?: string | null;
+    schedule_location?: Array<{
+      scheduled_arrival_time?: string | null;
+      scheduled_departure_time?: string | null;
+      scheduled_pass_time?: string | null;
+      public_arrival_time?: string | null;
+      public_departure_time?: string | null;
+      location?: { tiploc?: { tiploc_id?: string } };
+    }>;
+  }>;
+}
+
 export interface TimetableOptions {
   /** A better name for a location key than the timetable's own (station names). */
   name?: (key: string) => string | undefined;
@@ -96,6 +127,8 @@ export class Timetable implements ScheduleLookup {
   #names = new Map<string, string>();
   #byUid = new Map<string, Schedule>();
   #byHeadcode = new Map<string, Schedule[]>();
+  // TIPLOC -> STANOX: live reports name places by STANOX.
+  #stanoxOf = new Map<string, string>();
   #name: (key: string) => string | undefined;
 
   private constructor(dates: readonly string[], opts: TimetableOptions) {
@@ -111,51 +144,87 @@ export class Timetable implements ScheduleLookup {
 
   static async fromLines(lines: Iterable<string> | AsyncIterable<string>, dates: readonly string[], opts: TimetableOptions = {}): Promise<Timetable> {
     const t = new Timetable(dates, opts);
-    // TIPLOC -> STANOX: live reports name places by STANOX.
-    const stanoxOf = new Map<string, string>();
     const best = new Map<string, { rank: number; s: CifSchedule }>();
-    const weekdays = dates.map(weekdayIndex);
     for await (const line of lines) {
       if (line.startsWith('{"TiplocV1"')) {
         const tl = JSON.parse(line).TiplocV1;
         const key = tl.stanox || tl.tiploc_code;
-        stanoxOf.set(tl.tiploc_code, key);
+        t.#stanoxOf.set(tl.tiploc_code, key);
         if (tl.tps_description && !t.#names.has(key)) t.#names.set(key, titleCase(tl.tps_description));
       } else if (line.startsWith('{"JsonScheduleV1"')) {
         const s = JSON.parse(line).JsonScheduleV1 as CifSchedule;
-        dates.forEach((date, i) => {
-          if (s.schedule_start_date > date || s.schedule_end_date < date || s.schedule_days_runs?.[weekdays[i]] !== '1') return;
+        for (const date of dates) {
+          if (!runsOn(s, date)) continue;
           const id = `${s.CIF_train_uid}|${date}`;
           const rank = STP_RANK[s.CIF_stp_indicator] ?? 0;
           if (rank >= (best.get(id)?.rank ?? 0)) best.set(id, { rank, s });
-        });
+        }
       }
     }
-
-    const today = dates[dates.length - 1];
-    for (const [id, { s }] of best) {
-      if (s.CIF_stp_indicator === 'C') continue;
-      const date = id.slice(id.indexOf('|') + 1);
-      const stops = t.#pack(s.schedule_segment?.schedule_location ?? [], stanoxOf);
-      if (stops.length < 2 * STRIDE) continue;
-      // Earlier days only matter for trains still running after midnight.
-      if (date !== today && lastTime(stops) < 2880) continue;
-      const schedule: Schedule = {
-        uid: s.CIF_train_uid,
-        date,
-        headcode: s.schedule_segment?.signalling_id?.trim() ?? '',
-        atoc: s.atoc_code ?? 'ZZ',
-        service: serviceCodes(s),
-        stops,
-      };
-      t.#byUid.set(id, schedule);
-      if (schedule.headcode) {
-        const list = t.#byHeadcode.get(schedule.headcode);
-        if (list) list.push(schedule);
-        else t.#byHeadcode.set(schedule.headcode, [schedule]);
-      }
+    for (const [id, { s, rank }] of best) {
+      if (s.CIF_stp_indicator !== 'C') t.#add(s, id.slice(id.indexOf('|') + 1), rank);
     }
     return t;
+  }
+
+  /**
+   * A very short term plan from the VSTP feed: a schedule made within two
+   * days of running (engineering trains, extra freight), so not in the
+   * extract. Returns how many of the timetable's dates it changed.
+   */
+  addVstp(v: VstpSchedule): number {
+    const s = fromVstp(v);
+    const rank = STP_RANK[s.CIF_stp_indicator] ?? 0;
+    const remove = v.transaction_type === 'Delete' || s.CIF_stp_indicator === 'C';
+    let changed = 0;
+    for (const date of this.dates) {
+      if (!runsOn(s, date)) continue;
+      const id = `${s.CIF_train_uid}|${date}`;
+      if (remove) {
+        if (this.#remove(id)) changed++;
+      } else if (rank >= (this.#byUid.get(id)?.rank ?? 0) && this.#add(s, date, rank)) {
+        changed++;
+      }
+    }
+    return changed;
+  }
+
+  /** Keeps a schedule for one date, replacing any it had; false if it is not worth keeping. */
+  #add(s: CifSchedule, date: string, rank: number): boolean {
+    const stops = this.#pack(s.schedule_segment?.schedule_location ?? []);
+    if (stops.length < 2 * STRIDE) return false;
+    // Earlier days only matter for trains still running after midnight.
+    if (date !== this.dates[this.dates.length - 1] && lastTime(stops) < 2880) return false;
+    const schedule: Schedule = {
+      uid: s.CIF_train_uid,
+      date,
+      headcode: s.schedule_segment?.signalling_id?.trim() ?? '',
+      atoc: s.atoc_code || 'ZZ',
+      rank,
+      service: serviceCodes(s),
+      stops,
+    };
+    const id = `${schedule.uid}|${date}`;
+    this.#remove(id);
+    this.#byUid.set(id, schedule);
+    if (schedule.headcode) {
+      const list = this.#byHeadcode.get(schedule.headcode);
+      if (list) list.push(schedule);
+      else this.#byHeadcode.set(schedule.headcode, [schedule]);
+    }
+    return true;
+  }
+
+  #remove(id: string): boolean {
+    const old = this.#byUid.get(id);
+    if (!old) return false;
+    this.#byUid.delete(id);
+    const list = this.#byHeadcode.get(old.headcode);
+    if (list) {
+      list.splice(list.indexOf(old), 1);
+      if (!list.length) this.#byHeadcode.delete(old.headcode);
+    }
+    return true;
   }
 
   get size(): number {
@@ -244,7 +313,7 @@ export class Timetable implements ScheduleLookup {
     return k;
   }
 
-  #pack(locations: CifLocation[], stanoxOf: Map<string, string>): Int32Array {
+  #pack(locations: CifLocation[]): Int32Array {
     // Passenger trains: calls are the stops with public times. Others
     // (empty stock, freight) have none; their calls are where they stop.
     const isPublic = (v: string | null | undefined) => Boolean(v) && v !== '0000';
@@ -268,7 +337,7 @@ export class Timetable implements ScheduleLookup {
       const calls = hasPublic
         ? isPublic(l.public_arrival) || isPublic(l.public_departure)
         : pass === NONE && (arr !== NONE || dep !== NONE);
-      out.set([this.#keyOf(stanoxOf.get(tiploc) ?? tiploc), arr, dep, pass, calls ? 1 : 0], i * STRIDE);
+      out.set([this.#keyOf(this.#stanoxOf.get(tiploc) ?? tiploc), arr, dep, pass, calls ? 1 : 0], i * STRIDE);
     });
     return out;
   }
@@ -312,9 +381,56 @@ function serviceCodes(s: CifSchedule): ServiceCodes | undefined {
   return Object.keys(codes).length ? codes : undefined;
 }
 
+function runsOn(s: CifSchedule, date: string): boolean {
+  return s.schedule_start_date <= date && date <= s.schedule_end_date && s.schedule_days_runs?.[weekdayIndex(date)] === '1';
+}
+
+function fromVstp(v: VstpSchedule): CifSchedule {
+  const seg = v.schedule_segment?.[0];
+  return {
+    CIF_train_uid: v.CIF_train_uid.trim(),
+    CIF_stp_indicator: v.CIF_stp_indicator,
+    schedule_start_date: v.schedule_start_date,
+    schedule_end_date: v.schedule_end_date,
+    schedule_days_runs: v.schedule_days_runs,
+    atoc_code: seg?.atoc_code?.trim() || null,
+    schedule_segment: seg && {
+      signalling_id: seg.signalling_id,
+      CIF_power_type: seg.CIF_power_type,
+      CIF_timing_load: seg.CIF_timing_load,
+      CIF_speed: seg.CIF_speed,
+      CIF_train_class: seg.CIF_train_class,
+      CIF_sleepers: seg.CIF_sleepers,
+      CIF_reservations: seg.CIF_reservations,
+      CIF_catering_code: seg.CIF_catering_code,
+      schedule_location: seg.schedule_location?.map((l) => ({
+        tiploc_code: l.location?.tiploc?.tiploc_id,
+        arrival: vstpTime(l.scheduled_arrival_time),
+        departure: vstpTime(l.scheduled_departure_time),
+        pass: vstpTime(l.scheduled_pass_time),
+        public_arrival: vstpTime(l.public_arrival_time),
+        public_departure: vstpTime(l.public_departure_time),
+      })),
+    },
+  };
+}
+
+/** VSTP's "HHMMSS" as the extract's "HHMM", plus "H" from 30 seconds. */
+function vstpTime(v: string | null | undefined): string | null {
+  const t = v?.trim();
+  if (!t || t.length < 4) return null;
+  return `${t.slice(0, 4)}${Number(t.slice(4, 6)) >= 30 ? 'H' : ''}`;
+}
+
 /** Monday = 0, as in schedule_days_runs. */
+const weekdays = new Map<string, number>();
 function weekdayIndex(date: string): number {
-  return (new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7;
+  let day = weekdays.get(date);
+  if (day === undefined) {
+    day = (new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7;
+    weekdays.set(date, day);
+  }
+  return day;
 }
 
 // ---- London time ----

@@ -86,6 +86,8 @@ describe('TflTracker: trains with numbers', () => {
     expect(d.next?.name).toBe('Charlie');
     expect(d.pathBehind.length).toBeGreaterThan(1);
     expect(d.pathAhead.length).toBeGreaterThan(1);
+    // The line's trains.
+    expect(d.service).toMatchObject({ stock: '1992 Stock', kind: 'tube' });
   });
 
   it('treats "Check Front of Train" as an unknown destination', () => {

@@ -233,6 +233,9 @@ h1 .logo { flex: none; border-radius: 6px; }
 .callout span { overflow: hidden; text-overflow: ellipsis; color: #344054; }
 .callout i { font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
 .callout i.late { color: #b54708; }
+.callout .co-load { display: flex; align-items: center; gap: 5px; margin-top: 1px; cursor: default; }
+.meter { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 10px; }
+.meter s { width: 3px; border-radius: 1px; background: #d0d5dd; }
 .d-note { margin-top: 8px; }
 
 .calls { list-style: none; margin: 12px 0 0; padding: 10px 0 0; border-top: 1px solid var(--line); max-height: 340px; overflow-y: auto; position: relative; }

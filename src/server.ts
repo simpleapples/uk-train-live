@@ -16,10 +16,12 @@ import { DemoFeed } from './feeds/demoFeed.ts';
 import { OPERATORS } from './feeds/demoNetwork.ts';
 import type { Feed, PlannedStop } from './feeds/feed.ts';
 import { NrodFeed } from './feeds/nrodFeed.ts';
+import { VstpFeed } from './feeds/vstpFeed.ts';
 import { type Credentials, fetchCorpus } from './feeds/nrodFiles.ts';
 import { operatorName as liveOperatorName, TFL_RUN_TOCS } from './feeds/tocCodes.ts';
 import { keepTimetable } from './schedule/keeper.ts';
-import type { Timetable } from './schedule/timetable.ts';
+import type { Timetable, VstpSchedule } from './schedule/timetable.ts';
+import { TflLoads } from './tfl/loads.ts';
 import { type TflData, TflTracker } from './tfl/tflTracker.ts';
 
 try { process.loadEnvFile(); } catch { /* no .env file */ }
@@ -126,7 +128,8 @@ if (tflOn) {
     tflPaths.set(lineId, new PathService(tflLocations, track, TFL_PATH_OPTIONS));
   }
   const missing = Object.keys(tflData.lines).filter((id) => !tracks[id]);
-  sources.push(new TflTracker(tflData, tflLocations, (lineId) => tflPaths.get(lineId)!, { appKey: env.TFL_APP_KEY }));
+  const loads = TflLoads.load(new URL('../data/tfl-loads.json.gz', import.meta.url));
+  sources.push(new TflTracker(tflData, tflLocations, (lineId) => tflPaths.get(lineId)!, { appKey: env.TFL_APP_KEY, loads }));
   console.log(`TfL: ${Object.keys(tflData.lines).length} lines${missing.length ? ` (straight lines for ${missing.join(', ')})` : ''}`);
 }
 
@@ -135,10 +138,22 @@ if (tflOn) {
 let timetable: Timetable | null = null;
 let plannedStops: ((id: string) => PlannedStop[] | undefined) | undefined = feed.plannedStops?.bind(feed);
 const stateFile = join(stateDir, 'trains.json');
-const saveState = () => {
+// Short-notice schedules (VSTP): applied to each day's timetable as it loads,
+// and kept across restarts until they have run.
+const vstpFile = join(stateDir, 'vstp.json');
+let vstp: VstpSchedule[] = [];
+let vstpChanged = false;
+const writeState = (file: string, data: unknown) => {
   mkdirSync(stateDir, { recursive: true });
-  writeFileSync(`${stateFile}.part`, JSON.stringify(store.exportState(Date.now())));
-  renameSync(`${stateFile}.part`, stateFile);
+  writeFileSync(`${file}.part`, JSON.stringify(data));
+  renameSync(`${file}.part`, file);
+};
+const saveState = () => {
+  writeState(stateFile, store.exportState(Date.now()));
+  if (vstpChanged) {
+    writeState(vstpFile, vstp);
+    vstpChanged = false;
+  }
 };
 if (creds) {
   if (existsSync(stateFile)) {
@@ -152,14 +167,28 @@ if (creds) {
   setInterval(() => {
     try { saveState(); } catch (err) { console.warn(`Could not save trains: ${(err as Error).message}`); }
   }, SAVE_EVERY_MS);
+  if (existsSync(vstpFile)) {
+    try { vstp = JSON.parse(readFileSync(vstpFile, 'utf8')) as VstpSchedule[]; } catch { /* start afresh */ }
+  }
   keepTimetable({
     creds,
     file: join(stateDir, 'schedule-full.json.gz'),
     name: (key) => locations.name(key),
     onLoad: (t) => {
+      const kept = vstp.filter((v) => v.schedule_end_date >= t.dates[0]);
+      vstpChanged ||= kept.length !== vstp.length;
+      vstp = kept;
+      const added = vstp.reduce((n, v) => n + t.addVstp(v), 0);
+      if (added) console.log(`[vstp] ${added} short-notice schedules added to the timetable`);
       timetable = t;
       store.setTimetable(t);
     },
+  });
+  // Trains without a schedule pick one up at their next report.
+  new VstpFeed(creds).start((v) => {
+    vstp.push(v);
+    vstpChanged = true;
+    timetable?.addVstp(v);
   });
   plannedStops = (id) => {
     const s = store.scheduleOf(id);
