@@ -198,8 +198,10 @@ h1 .logo { flex: none; border-radius: 6px; }
 .badge.minor { background: var(--minor); color: #3b2a00; }
 .badge.major { background: var(--major); }
 .d-route { margin-top: 8px; font-weight: 650; font-size: 15px; }
-.d-route:empty, .d-meta:empty, .d-note:empty { display: none; }
-.d-meta { margin-top: 2px; color: var(--muted); font-size: 12px; }
+.d-route:empty, .d-meta:empty, .d-service:empty, .d-note:empty { display: none; }
+.d-meta, .d-service { margin-top: 2px; color: var(--muted); font-size: 12px; }
+.d-service b { color: var(--fg); font-weight: 600; }
+.d-service b, .d-service span { white-space: nowrap; }
 
 .facts { display: grid; grid-template-columns: 1.15fr 1fr; gap: 6px; margin: 12px 0 0; }
 .fact { background: var(--surface); border-radius: 8px; padding: 7px 10px; display: flex; flex-direction: column; min-width: 0; }

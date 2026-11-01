@@ -3,6 +3,7 @@
 // is among them, and the track to highlight.
 
 import type { PlannedStop } from '../feeds/feed.ts';
+import { describeService, type ServiceDetails } from '../schedule/service.ts';
 import type { LocationIndex } from './locations.ts';
 import type { PathService } from './paths.ts';
 import type { LonLat } from './track.ts';
@@ -37,6 +38,8 @@ export interface TrainDetails {
   /** Track already covered, and still ahead, split at the last reported location. */
   pathBehind: LonLat[];
   pathAhead: LonLat[];
+  /** Train type and facilities, from its schedule. */
+  service?: ServiceDetails;
 }
 
 export function describeTrain(
@@ -73,7 +76,7 @@ export function describeTrain(
     if (seg) append(placed[n].i <= here ? pathBehind : pathAhead, seg);
   }
 
-  return { train: view, timetabled, stops, previous, current, next, pathBehind, pathAhead };
+  return { train: view, timetabled, stops, previous, current, next, pathBehind, pathAhead, service: describeService(store.scheduleOf(id)) };
 }
 
 function fromTimetable(

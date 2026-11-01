@@ -11,7 +11,7 @@ const tiploc = (code: string, stanox: string | null, desc: string) =>
   JSON.stringify({ TiplocV1: { transaction_type: 'Create', tiploc_code: code, stanox, tps_description: desc } });
 
 interface Loc { tiploc: string; arr?: string; dep?: string; pass?: string; pub?: boolean }
-function schedule(o: { uid: string; stp?: string; atoc?: string; headcode?: string; start?: string; end?: string; days?: string; locs?: Loc[] }) {
+function schedule(o: { uid: string; stp?: string; atoc?: string; headcode?: string; start?: string; end?: string; days?: string; locs?: Loc[]; segment?: Record<string, string | null> }) {
   return JSON.stringify({
     JsonScheduleV1: {
       CIF_train_uid: o.uid,
@@ -22,6 +22,7 @@ function schedule(o: { uid: string; stp?: string; atoc?: string; headcode?: stri
       atoc_code: o.atoc ?? 'GR',
       schedule_segment: o.locs && {
         signalling_id: o.headcode ?? '1S12',
+        ...o.segment,
         schedule_location: o.locs.map((l) => ({
           tiploc_code: l.tiploc,
           arrival: l.arr ?? null,
@@ -61,6 +62,12 @@ describe('Timetable', () => {
     // Station names from the map's own index where it has one, else the timetable's.
     expect(t.byUid('C10001', DAY)).toEqual({ uid: 'C10001', date: DAY, atoc: 'GR', origin: 'London Kings Cross', destination: 'Peterborough' });
     expect(t.byUid('C10001', '2026-11-01')).toBeUndefined();
+  });
+
+  it("keeps the schedule's codes for the train itself", async () => {
+    const segment = { CIF_power_type: 'EMU', CIF_timing_load: '800', CIF_speed: '125', CIF_train_class: 'B', CIF_sleepers: null, CIF_catering_code: 'T ', CIF_reservations: '' };
+    const t = await load([schedule({ uid: 'C10001', locs: LNER_LOCS, segment })]);
+    expect(t.byUid('C10001', DAY)?.service).toEqual({ power: 'EMU', timingLoad: '800', speed: '125', seating: 'B', catering: 'T' });
   });
 
   it('finds a train first seen mid-journey by headcode, place and planned time', async () => {

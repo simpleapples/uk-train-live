@@ -21,6 +21,18 @@ export interface ScheduleInfo {
   atoc: string;
   origin: string;
   destination: string;
+  service?: ServiceCodes;
+}
+
+/** The schedule's CIF codes for the train itself; see service.ts. */
+export interface ServiceCodes {
+  power?: string;
+  timingLoad?: string;
+  speed?: string;
+  seating?: string;
+  sleepers?: string;
+  reservations?: string;
+  catering?: string;
 }
 
 interface Schedule {
@@ -28,6 +40,7 @@ interface Schedule {
   date: string;
   headcode: string;
   atoc: string;
+  service?: ServiceCodes;
   /** Per location, STRIDE ints: key index, arrival, departure, pass (half-minutes after the date's midnight, -1 if none), calls (1/0). */
   stops: Int32Array;
 }
@@ -58,7 +71,17 @@ interface CifSchedule {
   schedule_end_date: string;
   schedule_days_runs?: string;
   atoc_code?: string | null;
-  schedule_segment?: { signalling_id?: string | null; schedule_location?: CifLocation[] };
+  schedule_segment?: {
+    signalling_id?: string | null;
+    CIF_power_type?: string | null;
+    CIF_timing_load?: string | null;
+    CIF_speed?: string | null;
+    CIF_train_class?: string | null;
+    CIF_sleepers?: string | null;
+    CIF_reservations?: string | null;
+    CIF_catering_code?: string | null;
+    schedule_location?: CifLocation[];
+  };
 }
 
 export interface TimetableOptions {
@@ -122,6 +145,7 @@ export class Timetable implements ScheduleLookup {
         date,
         headcode: s.schedule_segment?.signalling_id?.trim() ?? '',
         atoc: s.atoc_code ?? 'ZZ',
+        service: serviceCodes(s),
         stops,
       };
       t.#byUid.set(id, schedule);
@@ -203,6 +227,7 @@ export class Timetable implements ScheduleLookup {
       atoc: s.atoc,
       origin: this.#nameOf(this.#keys[s.stops[first]]),
       destination: this.#nameOf(this.#keys[s.stops[last]]),
+      ...(s.service && { service: s.service }),
     };
   }
 
@@ -269,6 +294,22 @@ function lastTime(stops: Int32Array): number {
   let t = NONE;
   for (let i = 0; i < stops.length; i += STRIDE) t = Math.max(t, stops[i + 1], stops[i + 2], stops[i + 3]);
   return t;
+}
+
+function serviceCodes(s: CifSchedule): ServiceCodes | undefined {
+  const g = s.schedule_segment;
+  const codes: ServiceCodes = {};
+  const fields = {
+    power: g?.CIF_power_type,
+    timingLoad: g?.CIF_timing_load,
+    speed: g?.CIF_speed,
+    seating: g?.CIF_train_class,
+    sleepers: g?.CIF_sleepers,
+    reservations: g?.CIF_reservations,
+    catering: g?.CIF_catering_code,
+  };
+  for (const [k, v] of Object.entries(fields)) if (v?.trim()) codes[k as keyof ServiceCodes] = v.trim();
+  return Object.keys(codes).length ? codes : undefined;
 }
 
 /** Monday = 0, as in schedule_days_runs. */

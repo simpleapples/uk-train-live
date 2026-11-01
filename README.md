@@ -32,6 +32,7 @@ Trains glide along the real track, each with its whole route, next stop, delay a
 - 🛤️ **On the real track, not straight lines.** Trains are animated along OpenStreetMap track geometry, routed with A\* over a rail graph of 25,000 edges. Each TfL line routes only on its own track.
 - 🧭 **Direction and punctuality at a glance.** Every dot carries an arrow for its direction of travel. National Rail trains are coloured by lateness; TfL trains in their line colour.
 - 🗺️ **The whole route, one click away.** Origin → destination, then every calling point with planned, actual and expected times, from Network Rail's daily timetable. The track the train has covered fades out behind it as it moves.
+- 🚄 **What the train is.** Its class and name (Class 390 Pendolino, Class 800 Azuma), top speed, first class, catering and sleepers, read from the timetable.
 - 🚦 **Line status built in.** TfL closures and delays are flagged on each line, so a quiet line explains itself (e.g. "Piccadilly: Planned Closure").
 - 🔎 **Search and filter.** Find a train by headcode, line, operator or destination. Show any mix of networks, lines and operators, like "only the Central line and LNER".
 - ⚡ **Fast and light.** One Server-Sent Events stream with one-second deltas, gzip throughout, and batched track geometry. Trains survive server restarts.

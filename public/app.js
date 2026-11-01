@@ -292,6 +292,13 @@ function titleHtml(t) {
   return `${badge}<span class="hc">${escapeHtml(t.headcode)}</span>${delay ? `<span class="badge ${category(t)}">${delay}</span>` : ''}`;
 }
 
+/** "Class 390 Pendolino · 125 mph · First class · Trolley", from the train's schedule. */
+function serviceHtml(s) {
+  if (!s) return '';
+  const rest = [s.maxMph && `${s.maxMph} mph`, s.tonnes && `${s.tonnes.toLocaleString('en-GB')} t`, ...s.features].filter(Boolean);
+  return [s.stock && `<b>${escapeHtml(s.stock)}</b>`, ...rest.map((r) => `<span>${escapeHtml(r)}</span>`)].filter(Boolean).join(' · ');
+}
+
 function detailFor(t) {
   return detail?.train.id === t.id ? detail : null;
 }
@@ -347,6 +354,7 @@ function select(id) {
   setRoute(null);
   $('d-calls').replaceChildren();
   setHtml($('d-note'), '');
+  setHtml($('d-service'), '');
   renderDetailHead(t);
   $('browse').hidden = true;
   $('detail').hidden = false;
@@ -552,6 +560,7 @@ function renderDetail(d, scroll) {
   $('d-where-time').textContent = when;
   $('d-where-time').classList.toggle('late', !tfl && t.delayMin > 0);
 
+  setHtml($('d-service'), serviceHtml(d.service));
   const status = tfl ? lineStatusOf(t.line) : null;
   setHtml($('d-note'), status
     ? disruptionHtml(t.line, status, false)
