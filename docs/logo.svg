@@ -1,16 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UK Live Trains">
+  <defs>
+    <clipPath id="tile"><rect width="128" height="128" rx="28"/></clipPath>
+    <mask id="rails" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128">
+      <path d="M-10 108 C 46 108, 66 26, 138 24" fill="none" stroke="#fff" stroke-width="16"/>
+      <path d="M-10 108 C 46 108, 66 26, 138 24" fill="none" stroke="#000" stroke-width="9"/>
+    </mask>
+  </defs>
   <rect width="128" height="128" rx="28" fill="#0F172A"/>
-  <!-- A curve of track: rails and sleepers -->
-  <path d="M14 104 C 52 104, 60 26, 114 26" fill="none" stroke="#334155" stroke-width="14" stroke-linecap="round"/>
-  <path d="M14 104 C 52 104, 60 26, 114 26" fill="none" stroke="#94A3B8" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="2 8"/>
+  <g clip-path="url(#tile)">
+    <!-- A curve of railway track: sleepers, then two rails -->
+    <path d="M-10 108 C 46 108, 66 26, 138 24" fill="none" stroke="#64748B" stroke-width="26" stroke-dasharray="4 6"/>
+    <path d="M-10 108 C 46 108, 66 26, 138 24" fill="none" stroke="#E2E8F0" stroke-width="16" mask="url(#rails)"/>
+  </g>
   <!-- Train behind, running late -->
-  <circle cx="30" cy="102" r="9" fill="#E8A317" stroke="#FFFFFF" stroke-width="3"/>
+  <circle cx="26.6" cy="95.2" r="9" fill="#E8A317" stroke="#FFFFFF" stroke-width="3"/>
   <!-- The train: a dot with its direction of travel -->
-  <g transform="translate(66 62) rotate(38)">
-    <circle r="21" fill="#1A9E6F" stroke="#FFFFFF" stroke-width="4.5"/>
-    <path d="M0 -12 L 9.5 11 L 0 6 L -9.5 11 Z" fill="#FFFFFF"/>
+  <g transform="translate(70.9 54.4) rotate(48)">
+    <circle r="19" fill="#1A9E6F" stroke="#FFFFFF" stroke-width="4"/>
+    <path d="M0 -11 L 8.5 10 L 0 5.5 L -8.5 10 Z" fill="#FFFFFF"/>
   </g>
   <!-- Live -->
-  <circle cx="104" cy="98" r="7" fill="#D9412B"/>
-  <circle cx="104" cy="98" r="12" fill="none" stroke="#D9412B" stroke-width="2.5" opacity="0.45"/>
+  <circle cx="104" cy="100" r="7" fill="#D9412B"/>
+  <circle cx="104" cy="100" r="12" fill="none" stroke="#D9412B" stroke-width="2.5" opacity="0.45"/>
 </svg>
