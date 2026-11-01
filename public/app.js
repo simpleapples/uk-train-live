@@ -118,7 +118,8 @@ const OPERATOR_BADGES = {
 /** A code for an operator without a badge of its own: its initials ("Serco Rail Operations" -> SRO). */
 function initials(name) {
   const words = name.split(/[\s&-]+/).filter((w) => w && !/^(and|of|the)$/i.test(w));
-  return words.length > 1 ? words.slice(0, 4).map((w) => w[0].toUpperCase()).join('') : name.slice(0, 4).toUpperCase();
+  // Acronyms stay whole: "SB Rail" -> SBR, not SR (ScotRail).
+  return words.length > 1 ? words.map((w) => (/^[A-Z0-9]{2,}$/.test(w) ? w : w[0].toUpperCase())).join('').slice(0, 4) : name.slice(0, 4).toUpperCase();
 }
 
 const netOfLine = (line) => NETWORKS.find((n) => TFL_LINES[n]?.[line]);
@@ -1162,10 +1163,17 @@ function showTooltip(id, event) {
 
 // ---- Network and line filter ----
 //
-// One control per network (the chips). "Lines" lays the chips out as rows
-// with each network's lines or operators beside them. A badge is lit only
-// when its train would show; picking one while its network is off shows that
-// line alone, and hiding a network's last line switches the network off.
+// Two chips: National Rail, and TfL for its four networks together. "Lines"
+// lays them out as rows, TfL's networks under it, each with its lines or
+// operators beside it. A badge is lit only when its train would show; picking
+// one while its network is off shows that line alone, and hiding a network's
+// last line switches the network off.
+
+const TFL_NETWORKS = NETWORKS.filter((n) => n !== 'rail');
+const GROUPS = [
+  { id: 'rail', label: 'National Rail', color: NET_COLORS.rail, nets: ['rail'] },
+  { id: 'tfl', label: 'TfL', color: '#0019A8', nets: TFL_NETWORKS },
+];
 
 /** Badges per network: rail operators seen on the map, then every TfL line. */
 function lineGroups() {
@@ -1191,23 +1199,26 @@ function renderFilters() {
   const el = $('filters');
   const disrupted = lastStatus?.sources?.tfl?.lines ?? {};
   const groups = lineGroups();
-  const chip = ({ net, badges }) => {
-    const on = shown.has(net);
-    const lit = on ? badges.filter((b) => !hiddenLines.has(b.key)).length : 0;
+  // A chip for a group (National Rail, TfL) or, under TfL, one network.
+  const chip = (id, label, color, nets, sub = false) => {
+    const badges = groups.filter((g) => nets.includes(g.net)).flatMap((g) => (shown.has(g.net) ? g.badges : g.badges.map((b) => ({ ...b, off: true }))));
+    const on = nets.some((n) => shown.has(n));
+    const lit = badges.filter((b) => !b.off && !hiddenLines.has(b.key)).length;
     const partial = on && badges.length > 1 && lit < badges.length;
     const flagged = badges.some((b) => disrupted[b.key.slice(4)] && b.key.startsWith('tfl:'));
-    return `<button type="button" class="chip" data-focus="net:${net}" data-net="${net}" aria-pressed="${on}">`
-      + `<span class="net-dot" style="background:${NET_COLORS[net]}"></span>${NET_LABELS[net]}`
+    return `<button type="button" class="chip${sub ? ' sub' : ''}" data-focus="nets:${id}" data-nets="${nets.join(' ')}" aria-pressed="${on}">`
+      + `<span class="net-dot" style="background:${color}"></span>${label}`
       + `${partial ? `<span class="net-count">${lit}/${badges.length}</span>` : ''}`
       + `${flagged && !linesOpen ? '<span class="flag" title="Some lines disrupted"></span>' : ''}</button>`;
   };
+  const groupChip = (g) => chip(g.id, g.label, g.color, g.nets);
   const toggle = `<button type="button" class="lines-toggle" data-focus="toggle" aria-expanded="${linesOpen}" title="Choose lines and operators">${SLIDERS_ICON}Lines</button>`;
 
   let html;
   if (!linesOpen) {
-    html = `<div class="chips">${toggle}${groups.map(chip).join('')}</div>`;
+    html = `<div class="chips">${toggle}${GROUPS.map(groupChip).join('')}</div>`;
   } else {
-    const rows = groups.map((g) => {
+    const lines = (g) => {
       const on = shown.has(g.net);
       const badges = g.badges.length > 1 ? g.badges.map((b) => {
         const status = b.key.startsWith('tfl:') ? disrupted[b.key.slice(4)] : null;
@@ -1215,8 +1226,11 @@ function renderFilters() {
         const label = `${b.name}${status ? ` (${status.summary})` : ''}`;
         return `<button type="button" class="lf-btn" data-focus="line:${escapeHtml(b.key)}" data-key="${escapeHtml(b.key)}" aria-pressed="${on && !hiddenLines.has(b.key)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${badgeHtml(b)}${flag}</button>`;
       }).join('') : '';
-      return `${chip(g)}<div class="net-lines">${badges}</div>`;
-    }).join('');
+      return `<div class="net-lines">${badges}</div>`;
+    };
+    const rail = groups.find((g) => g.net === 'rail');
+    const rows = groupChip(GROUPS[0]) + lines(rail) + groupChip(GROUPS[1]) + '<div></div>'
+      + groups.filter((g) => g.net !== 'rail').map((g) => chip(g.net, NET_LABELS[g.net], NET_COLORS[g.net], [g.net], true) + lines(g)).join('');
     // Closed lines first: they explain why a line has no trains.
     const issues = Object.entries(disrupted)
       .sort(([a, s], [b, t]) => Number(t.closed) - Number(s.closed) || lineName(a).localeCompare(lineName(b)))
@@ -1251,12 +1265,16 @@ function applyFilter(networks, hidden) {
   render();
 }
 
-function toggleNetwork(net) {
+/** Switches networks off if any is showing, otherwise on. */
+function toggleNetworks(nets) {
+  const on = nets.some((n) => shown.has(n));
   const next = new Set(shown);
-  if (next.has(net)) next.delete(net);
-  else next.add(net);
-  // Either way the network comes back with all its lines next time.
-  applyFilter([...next], [...hiddenLines].filter((k) => netOfKey(k) !== net));
+  for (const n of nets) {
+    if (on) next.delete(n);
+    else next.add(n);
+  }
+  // Either way the networks come back with all their lines next time.
+  applyFilter([...next], [...hiddenLines].filter((k) => !nets.includes(netOfKey(k))));
 }
 
 function toggleLine(key) {
@@ -1291,8 +1309,8 @@ $('filters').addEventListener('click', (e) => {
     applyFilter(NETWORKS, []);
   } else if (btn.dataset.act === 'none') {
     applyFilter([], []);
-  } else if (btn.dataset.net) {
-    toggleNetwork(btn.dataset.net);
+  } else if (btn.dataset.nets) {
+    toggleNetworks(btn.dataset.nets.split(' '));
   } else if (btn.dataset.key) {
     toggleLine(btn.dataset.key);
   }

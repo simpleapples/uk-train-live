@@ -126,6 +126,8 @@ h1 .logo { flex: none; border-radius: 6px; }
 .link-btn { border: 0; background: none; padding: 2px 0; font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; }
 .net-rows { display: grid; grid-template-columns: max-content 1fr; gap: 8px 10px; align-items: start; }
 .net-rows .chip { justify-self: stretch; }
+/* TfL's networks, under the TfL chip. */
+.net-rows .chip.sub { margin-left: 14px; height: 26px; }
 .net-lines { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 4px; }
 .lf-btn { position: relative; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 5px; }
 .lf-btn[aria-pressed="false"] .lb { opacity: 0.25; filter: grayscale(1); }
