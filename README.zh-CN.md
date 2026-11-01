@@ -9,7 +9,6 @@
 国铁数据来自 Network Rail 开放数据，伦敦地铁、Overground、Elizabeth line 和 DLR 来自 TfL。<br>
 每列车都沿着真实轨道移动，点开就能看到整条路线、下一站、晚点和速度。
 
-[![CI](https://github.com/simpleapples/uk-train-live/actions/workflows/ci.yml/badge.svg)](https://github.com/simpleapples/uk-train-live/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.18-339933?logo=node.js&logoColor=white)](package.json)
 [![Runtime dependencies](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)](package.json)

@@ -9,7 +9,6 @@
 National Rail from Network Rail's open data feeds, plus the Tube, Overground, Elizabeth line and DLR from TfL.<br>
 Trains glide along the real track, each with its whole route, next stop, delay and speed.
 
-[![CI](https://github.com/simpleapples/uk-train-live/actions/workflows/ci.yml/badge.svg)](https://github.com/simpleapples/uk-train-live/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.18-339933?logo=node.js&logoColor=white)](package.json)
 [![Runtime dependencies](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)](package.json)
