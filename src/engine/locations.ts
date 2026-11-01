@@ -15,16 +15,44 @@ export type StanoxTable = Record<string, { tiplocs: string[]; name?: string }>;
 
 export interface Place extends Station {
   key: string;
+  /** A junction, yard, signal or crossing rather than a station. */
+  timingPoint?: boolean;
 }
 
-// Operator and depot abbreviations keep their capitals ("Tonbridge West Yard GBRf").
-const ABBREVIATIONS: Record<string, string> = {
-  GBRF: 'GBRf', DBC: 'DBC', DBS: 'DBS', EWS: 'EWS', DRS: 'DRS', FLT: 'FLT', LUL: 'LUL', DLR: 'DLR', TMD: 'TMD', LMD: 'LMD', EMD: 'EMD',
-};
+/** TIPLOC -> [lon, lat] for timing points that are not stations, as written by scripts/build-timing-points.ts. */
+export type TimingPointTable = Record<string, [number, number]>;
 
-/** Upper-case CORPUS and timetable names ("ROTHERHAM CENTRAL") in title case. */
+// Operator abbreviations keep their capitals ("Tonbridge West Yard GBRf").
+const ABBREVIATIONS: Record<string, string> = {
+  GBRF: 'GBRf', DBC: 'DBC', DBS: 'DBS', EWS: 'EWS', DRS: 'DRS', FLT: 'FLT', FHH: 'FHH', FLHH: 'FLHH', LUL: 'LUL', DLR: 'DLR', EMD: 'EMD', ISU: 'ISU', MOD: 'MoD',
+};
+// Network Rail's short forms, spelt out where they can only mean one thing
+// ("St" may be Saint or Street, "Eng" Engineers or Engine: left alone).
+const EXPANSIONS: Record<string, string> = {
+  jn: 'Junction', jcn: 'Junction', jct: 'Junction', sig: 'Signal', sdgs: 'Sidings', sdg: 'Siding', sth: 'South', nth: 'North',
+  yd: 'Yard', rd: 'Road', dn: 'Down', gds: 'Goods', lp: 'Loop', recp: 'Reception', tml: 'Terminal', teml: 'Terminal', term: 'Terminal',
+  stn: 'Station', dpt: 'Depot', maint: 'Maintenance', frt: 'Freight', aggs: 'Aggregates', lc: 'Level Crossing', gf: 'Ground Frame',
+  sb: 'Signal Box', cs: 'Carriage Sidings', csd: 'Carriage Servicing Depot', chs: 'Carriage Holding Sidings', ps: 'Power Station',
+  tmd: 'Traction Maintenance Depot', lmd: 'Light Maintenance Depot', ce: 'Engineers', fd: 'Freight Depot',
+  upl: 'Up Passenger Loop', dpl: 'Down Passenger Loop', md: 'Maintenance Depot', ln: 'Lane', sq: 'Square',
+};
+// Only with a full stop, where the bare word could be a name ("Car Dyke").
+const DOTTED: Record<string, string> = { car: 'carriage' };
+
+/**
+ * Upper-case CORPUS and timetable names ("ROTHERHAM CENTRAL", "HEATON STH
+ * JN.") in title case, with short forms spelt out ("Heaton South Junction").
+ */
 export function titleCase(s: string): string {
-  return s.trim().toLowerCase().replace(/\b[a-z][a-z0-9]*/g, (w) => ABBREVIATIONS[w.toUpperCase()] ?? w[0].toUpperCase() + w.slice(1));
+  return s.trim().toLowerCase()
+    // Dotted short forms first: "l.c." -> "lc", "jn." -> "jn", "car." -> "Carriage".
+    .replace(/\b((?:[a-z]\.){2,})(?=\s|\)|$)/g, (m) => m.replaceAll('.', ''))
+    .replace(/\b([a-z]+)\.(?=\s|\)|$)/g, (m, w: string) => DOTTED[w] ?? (EXPANSIONS[w] || w === 'st' ? w : m))
+    // Words, but not the "s" of "King's".
+    .replace(/(^|[^a-z0-9'’])([a-z][a-z0-9]*)/g, (_, before: string, w: string) => before + (
+      ABBREVIATIONS[w.toUpperCase()] ?? EXPANSIONS[w]
+      // Codes stay in capitals: with digits (signal "MS35") or without vowels ("MDHC").
+      ?? (/\d/.test(w) || (w.length > 1 && w !== 'st' && !/[aeiouy]/.test(w)) ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1))));
 }
 
 export class LocationIndex {
@@ -41,13 +69,24 @@ export class LocationIndex {
     return index;
   }
 
-  /** Live feed: STANOX -> first TIPLOC that has station coordinates. */
-  static byStanox(stations: StationTable, stanox: StanoxTable): LocationIndex {
+  /**
+   * Live feed: STANOX -> first TIPLOC that has station coordinates, else one
+   * that is a known timing point (junction, yard), named from CORPUS.
+   */
+  static byStanox(stations: StationTable, stanox: StanoxTable, timingPoints: TimingPointTable = {}): LocationIndex {
     const index = new LocationIndex();
     for (const [code, entry] of Object.entries(stanox)) {
-      const tiploc = entry.tiplocs.find((t) => stations[t]);
-      if (tiploc) index.add(code, stations[tiploc]);
-      else if (entry.name) index.#names.set(code, titleCase(entry.name));
+      const station = entry.tiplocs.find((t) => stations[t]);
+      const point = station ? undefined : entry.tiplocs.find((t) => timingPoints[t]);
+      const name = entry.name ? titleCase(entry.name) : undefined;
+      if (station) {
+        index.add(code, stations[station]);
+      } else if (point) {
+        const [lon, lat] = timingPoints[point];
+        index.#places.set(code, { key: code, name: name ?? point, lat, lon, timingPoint: true });
+      } else if (name) {
+        index.#names.set(code, name);
+      }
     }
     return index;
   }

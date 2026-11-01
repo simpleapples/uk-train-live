@@ -144,6 +144,7 @@ npm run data:stations   # NaPTAN 车站 → data/stations.json
 npm run data:track      # 从 OpenFreeMap 瓦片提取 OSM 铁路图 → data/track.json.gz
 npm run data:tfl        # TfL 线路、车站和每条线的轨道 → data/tfl*.json*
 npm run data:tfl-loads  # TfL 列车典型载客量（NUMBAT） → data/tfl-loads.json.gz
+npm run data:timing-points  # 道岔、车场和信号机的位置（BPLAN） → data/timing-points.json
 ```
 
 </details>
@@ -151,7 +152,7 @@ npm run data:tfl-loads  # TfL 列车典型载客量（NUMBAT） → data/tfl-loa
 ## ⚠️ 已知限制
 
 - **位置是估算的**：沿轨道在两次报告之间插值，不是 GPS。
-- **TRUST 只在计时点报告**，计时点之间可能隔好几公里。没有坐标的道岔，从上一个已知车站接着走。
+- **TRUST 只在计时点报告**，计时点之间可能隔好几公里。道岔、车场和信号机的位置来自 Network Rail 的规划数据（BPLAN，最后一版发布于 2024 年）：约一半有坐标，其余大多按前后相邻的点推算，剩下的少数从上一个已知地点接着走。
 - **速度是区间平均值**：估算值来自时刻表或 TfL 预测，实测值来自两次报告之间，不是瞬时速度。
 - **TfL 的拥挤程度是典型值，不是实时的。** 来自 TfL 的 NUMBAT 模型，按区间和每 15 分钟统计的平均日。
 - **OpenRailwayMap 的公共瓦片**只适合原型，访问量大的公开网站应该自建。
@@ -185,6 +186,7 @@ npm run typecheck
 | 列车运行、时刻表、CORPUS | [Network Rail Open Data](https://publicdatafeeds.networkrail.co.uk) | Network Rail 数据许可：*"Contains information of Network Rail Infrastructure Limited licensed under the Network Rail data feeds licence."* 不使用 Network Rail、National Rail 和各火车公司的 logo，运营公司用文字小标表示。 |
 | 地铁、Overground、Elizabeth line、DLR | [TfL Unified API](https://api-portal.tfl.gov.uk) | *Powered by TfL Open Data.* 含 OS 数据 © Crown copyright and database rights。 |
 | 列车典型载客量（`data/tfl-loads.json.gz`） | [TfL NUMBAT](https://crowding.data.tfl.gov.uk) | *Powered by TfL Open Data.* |
+| 道岔、车场和信号机的位置（`data/timing-points.json`） | Network Rail BPLAN 地理数据，来自 [Open Rail Data wiki](https://wiki.openraildata.com/index.php/BPLAN_Geography_Data) | *Contains information of Network Rail Infrastructure Limited.* |
 | 车站坐标（`data/stations.json`） | NaPTAN（英国交通部） | Open Government Licence v3.0 |
 | 轨道几何（`data/track.json.gz`、`data/tfl-track.json.gz`） | © [OpenStreetMap](https://www.openstreetmap.org/copyright) 贡献者，经 [OpenFreeMap](https://openfreemap.org) / OpenMapTiles 和 Overpass | [ODbL](https://opendatacommons.org/licenses/odbl/) |
 | 底图和铁路图层 | [OpenFreeMap](https://openfreemap.org)、[OpenRailwayMap](https://www.openrailwaymap.org) | © OpenMapTiles © OpenStreetMap 贡献者；CC-BY-SA |

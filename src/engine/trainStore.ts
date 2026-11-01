@@ -258,6 +258,10 @@ export class TrainStore {
     let n = 0;
     for (const rec of state.trains) {
       if (!rec?.id || this.#trains.has(rec.id) || now - rec.lastSeen > STALE_AFTER_MS) continue;
+      // A train standing where the last run could not place it (a junction
+      // since given a position) moves to its last report.
+      const last = this.#locations.get(rec.history.at(-1)?.key);
+      if (rec.view && rec.view.state !== 'moving' && last && last.key !== rec.view.from.key) rec.view = { ...rec.view, from: last };
       this.#trains.set(rec.id, rec);
       if (rec.view) this.#changed.add(rec.id);
       n++;
@@ -324,9 +328,11 @@ export class TrainStore {
     };
     const next = this.#locations.get(body.next_report_stanox);
     const runMin = Number(body.next_report_run_time);
-    // Stations report an arrival for trains running through as well: if the
-    // timetable has the train passing here, it has not stopped.
-    const passing = body.event_type === 'ARRIVAL' && rec.view?.state === 'moving' && this.#passesAt(rec, here.key, Number(body.planned_timestamp));
+    // Places report an arrival for trains running through as well. The
+    // timetable says whether the train stops here; without it, a junction or
+    // signal is passed and a station is a stop.
+    const passing = body.event_type === 'ARRIVAL' && rec.view?.state === 'moving'
+      && (this.#passesAt(rec, here.key, Number(body.planned_timestamp)) ?? Boolean(placed?.timingPoint));
     // Reports at unplaced timing points are almost always passes.
     const running = body.event_type === 'DEPARTURE' || !placed || passing;
 
@@ -373,11 +379,12 @@ export class TrainStore {
   }
 
   /**
-   * The train's schedule runs through `key` without stopping at about
-   * `plannedMs`. By time as well as place: a train may pass one place several
-   * times (railhead treatment trains go out and back along each line).
+   * Whether the train's schedule runs through `key` without stopping at
+   * about `plannedMs`; undefined when the schedule does not say. By time as
+   * well as place: a train may pass one place several times (railhead
+   * treatment trains go out and back along each line).
    */
-  #passesAt(rec: TrainRecord, key: string, plannedMs: number): boolean {
+  #passesAt(rec: TrainRecord, key: string, plannedMs: number): boolean | undefined {
     const s = rec.schedule;
     const stops = s && Number.isFinite(plannedMs) ? this.#timetable?.plannedStops?.(s.uid, s.date) : undefined;
     let best: PlannedStop | undefined;
@@ -386,7 +393,7 @@ export class TrainStore {
       const g = p.key === key ? Math.abs((p.arr ?? p.dep ?? Infinity) - plannedMs) : Infinity;
       if (g <= gap) [best, gap] = [p, g];
     }
-    return Boolean(best && !best.call && best.arr === undefined);
+    return best && !best.call && best.arr === undefined;
   }
 
   #record(rec: TrainRecord, body: MovementBody, at: number, delayMin: number): void {

@@ -158,6 +158,35 @@ describe('TrainStore', () => {
     expect(store.snapshot().map((t) => t.id)).toEqual(['871S12MO31']);
   });
 
+  it('places reports at junctions too, and takes an arrival there for a pass', () => {
+    const withJunction = LocationIndex.byStanox(stations, {
+      '87701': { tiplocs: ['KNGX'] },
+      '86021': { tiplocs: ['STEVNGE'] },
+      '86099': { tiplocs: ['WYMONDJ'], name: 'WYMONDLEY JN' },
+    }, { WYMONDJ: [-0.23, 51.93] });
+    const store = new TrainStore(withJunction);
+    store.apply(movement({ next_report_stanox: '86099', next_report_run_time: '25' }), T0);
+    store.apply(movement({ event_type: 'ARRIVAL', planned_event_type: 'ARRIVAL', loc_stanox: '86099', next_report_stanox: '86021', next_report_run_time: '3' }), T0 + 25 * 60_000);
+    const [t] = store.snapshot();
+    expect(t).toMatchObject({ state: 'moving', from: { name: 'Wymondley Junction', lat: 51.93 }, to: { key: '86021' } });
+    // A station arrival, with no timetable to say otherwise, is a stop.
+    store.apply(movement({ event_type: 'ARRIVAL', planned_event_type: 'ARRIVAL', loc_stanox: '86021' }), T0 + 28 * 60_000);
+    expect(store.snapshot()[0].state).toBe('stopped');
+  });
+
+  it('moves a restored train standing at a newly placed junction to it', () => {
+    const before = new TrainStore(index);
+    // Wymondley Junction has no position yet: the train is shown standing at Kings Cross.
+    before.apply(movement({ next_report_stanox: '86099' }), T0);
+    before.apply(movement({ event_type: 'ARRIVAL', planned_event_type: 'ARRIVAL', loc_stanox: '86099', next_report_stanox: null }), T0 + 60_000);
+    expect(before.snapshot()[0]).toMatchObject({ state: 'stopped', from: { name: 'London Kings Cross' } });
+    const saved = JSON.parse(JSON.stringify(before.exportState(T0 + 60_000)));
+    const placed = LocationIndex.byStanox(stations, { '87701': { tiplocs: ['KNGX'] }, '86099': { tiplocs: ['WYMONDJ'], name: 'WYMONDLEY JN' } }, { WYMONDJ: [-0.23, 51.93] });
+    const after = new TrainStore(placed);
+    after.importState(saved, T0 + 2 * 60_000);
+    expect(after.snapshot()[0].from.name).toBe('Wymondley Junction');
+  });
+
   it('holds an arriving train at the station and records lateness', () => {
     const store = new TrainStore(index);
     store.apply(movement({ event_type: 'ARRIVAL', planned_event_type: 'ARRIVAL', loc_stanox: '86021', variation_status: 'LATE', timetable_variation: '4' }), T0);

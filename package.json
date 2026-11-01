@@ -23,6 +23,7 @@
     "data:track": "node --max-old-space-size=6144 scripts/build-track.ts",
     "data:tfl": "node scripts/build-tfl.ts",
     "data:tfl-loads": "node scripts/build-tfl-loads.ts",
+    "data:timing-points": "node scripts/build-timing-points.ts",
     "typecheck": "tsc",
     "test": "vitest run"
   },

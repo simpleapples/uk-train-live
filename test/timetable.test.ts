@@ -124,7 +124,7 @@ describe('Timetable', () => {
     const stops = t.plannedStops('C10001', DAY)!;
     expect(stops.map((s) => [s.key, s.name, s.call])).toEqual([
       ['87701', 'London Kings Cross', true],
-      ['86099', 'Wymondley Jn', false],
+      ['86099', 'Wymondley Junction', false],
       ['86021', 'Stevenage', true],
       ['70011', 'Peterborough', true],
       // No STANOX: keyed by TIPLOC.
@@ -173,9 +173,18 @@ describe('London time', () => {
     expect(londonTime(DAY, 12 * 60 * 2)).toBe(NOON);
   });
 
-  it('writes upper-case names in title case, keeping operator abbreviations', () => {
+  it('writes upper-case names in title case, spelling out short forms and keeping operator abbreviations', () => {
     expect(titleCase('TONBRIDGE WEST YARD GBRF')).toBe('Tonbridge West Yard GBRf');
-    expect(titleCase('ST MARY CRAY JN')).toBe('St Mary Cray Jn');
+    expect(titleCase('ST MARY CRAY JN')).toBe('St Mary Cray Junction');
+    // Short forms spelt out, codes kept in capitals, "St" and apostrophes left alone.
+    expect(titleCase('HEATON STH JN.')).toBe('Heaton South Junction');
+    expect(titleCase('OXMARSH L.C.')).toBe('Oxmarsh Level Crossing');
+    expect(titleCase('CLAPHAM JN. CAR. M.D.')).toBe('Clapham Junction Carriage Maintenance Depot');
+    expect(titleCase('BARNETBY DOWN RECP SDGS')).toBe('Barnetby Down Reception Sidings');
+    expect(titleCase('MARYPORT SIGNAL MS35')).toBe('Maryport Signal MS35');
+    expect(titleCase('LIVERPOOL EURO METAL(MDHC)')).toBe('Liverpool Euro Metal(MDHC)');
+    expect(titleCase("KING'S LYNN")).toBe("King's Lynn");
+    expect(titleCase('ST. JAMES (NEWCASTLE)')).toBe('St James (Newcastle)');
     expect(titleCase('ABERDEEN WATERLOO (GBRF)')).toBe('Aberdeen Waterloo (GBRf)');
   });
 
