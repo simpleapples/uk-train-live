@@ -83,6 +83,21 @@ describe('describeTrain', () => {
     expect(d.pathAhead).toHaveLength(2);
   });
 
+  it('does not count a junction reported by a train with no timetable as a stop, but keeps it for the route', () => {
+    const withJunction = LocationIndex.byStanox(stations, {
+      KNGX: { tiplocs: ['KNGX'] },
+      WYMONDJ: { tiplocs: ['WYMONDJ'], name: 'WYMONDLEY JN' },
+      STEVNGE: { tiplocs: ['STEVNGE'] },
+    }, { WYMONDJ: [-0.2, 51.8] });
+    const store = new TrainStore(withJunction);
+    store.apply(move({ loc_stanox: 'KNGX', next_report_stanox: 'WYMONDJ', next_report_run_time: '15', actual_timestamp: String(T0) }), T0);
+    store.apply(move({ loc_stanox: 'WYMONDJ', next_report_stanox: 'STEVNGE', next_report_run_time: '5', actual_timestamp: String(T0 + 15 * 60_000) }), T0);
+    const d = describeTrain(ID, store, withJunction, new PathService(withJunction, null))!;
+    expect(d.stops.map((s) => [s.name, s.call])).toEqual([['London Kings Cross', true], ['Wymondley Junction', false], ['Stevenage', true]]);
+    expect(d.previous?.name).toBe('London Kings Cross');
+    expect(d.pathBehind).toEqual([[-0.12, 51.53], [-0.2, 51.8]]);
+  });
+
   it('returns undefined for unknown trains', () => {
     expect(describeTrain('nope', new TrainStore(locations), locations, paths)).toBeUndefined();
   });

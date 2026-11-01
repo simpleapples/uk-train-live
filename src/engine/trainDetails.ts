@@ -15,7 +15,7 @@ export type StopStatus = 'passed' | 'current' | 'upcoming';
 export interface StopDetail {
   key: string;
   name: string;
-  /** False for timing points the train runs through without stopping. */
+  /** False for places the train runs through: not listed, but they place it and draw its route. */
   call: boolean;
   status: StopStatus;
   lat?: number;
@@ -64,6 +64,8 @@ export function describeTrain(
       s.lat = p.lat;
       s.lon = p.lon;
     }
+    // Reports alone: a junction or yard it reported at is not a stop.
+    if (!timetabled && (!p || p.timingPoint)) s.call = false;
   }
 
   const here = stops.findLastIndex((s) => s.status !== 'upcoming');

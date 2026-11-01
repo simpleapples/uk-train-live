@@ -260,11 +260,6 @@ h1 .logo { flex: none; border-radius: 6px; }
 .call.passed .c-name { color: var(--muted); }
 .call.current .c-dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(40, 86, 214, 0.2); }
 .call.current .c-name { font-weight: 650; }
-/* Timing points the train runs through without stopping */
-.call.pass { min-height: 20px; }
-.call.pass .c-time, .call.pass .c-name { font-size: 11px; color: var(--subtle); font-weight: 400; }
-.call.pass .c-dot { width: 6px; height: 6px; border-width: 0; background: var(--accent); }
-.call.pass.passed .c-dot { background: #c0c5cf; }
 /* The train, between two stops */
 .call.now { min-height: 16px; }
 .call.now::before { background: linear-gradient(#c0c5cf 50%, var(--accent) 50%); }

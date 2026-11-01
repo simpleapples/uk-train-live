@@ -637,10 +637,13 @@ function renderDetail(d, scroll) {
     ? disruptionHtml(t.line, status, false)
     : !tfl && !d.timetabled ? '<p class="note">Only stops reported so far (no timetable feed).</p>' : '');
 
-  // Every stop on the route, with timing points it runs through shown smaller.
+  // Only where the train stops. The places it runs through stay in d.stops:
+  // they place it on the map and draw its route, but are not listed.
+  const stops = d.stops.filter((s) => s.call);
+  const atListedStop = t.state !== 'moving' && stops.some((s) => s.status === 'current');
+  const nowIndex = atListedStop ? -1 : stops.findLastIndex((s) => s.status !== 'upcoming');
   const items = [];
-  const nowIndex = t.state === 'moving' ? d.stops.findLastIndex((s) => s.status !== 'upcoming') : -1;
-  d.stops.forEach((s, i) => {
+  stops.forEach((s, i) => {
     let left = '';
     let right = '';
     let late = false;
@@ -650,22 +653,22 @@ function renderDetail(d, scroll) {
       const planned = timeOf(s, 'planned');
       const actual = timeOf(s, 'actual');
       left = hhmm(planned);
-      if (s.call && actual) {
+      if (actual) {
         right = hhmm(actual);
         late = planned ? actual - planned >= 60_000 : false;
-      } else if (s.call && s.status === 'upcoming' && planned && t.delayMin > 0) {
+      } else if (s.status === 'upcoming' && planned && t.delayMin > 0) {
         right = hhmm(expectedOf(s, t.delayMin));
         late = true;
       }
     }
-    items.push(`<li class="call ${s.status}${s.call ? '' : ' pass'}">
+    items.push(`<li class="call ${s.status}">
       <span class="c-time">${left}</span>
       <span class="c-dot"></span>
       <span class="c-name">${escapeHtml(s.name)}</span>
       <span class="c-rt${late ? ' late' : ''}">${escapeHtml(right)}</span>
     </li>`);
     // The train itself, between the stop it left and the next one.
-    if (i === nowIndex && d.stops[i + 1]) items.push('<li class="call now" aria-label="Train is here"><span></span><span class="c-dot"></span></li>');
+    if (i === nowIndex && stops[i + 1]) items.push('<li class="call now" aria-label="Train is here"><span></span><span class="c-dot"></span></li>');
   });
   const list = $('d-calls');
   list.innerHTML = items.join('');
