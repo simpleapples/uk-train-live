@@ -8,12 +8,20 @@ import type { ScheduleInfo, ServiceCodes } from './timetable.ts';
 export interface ServiceDetails {
   /** "Class 390 Pendolino", or the kind of train when the class is unknown. */
   stock?: string;
+  /** What to draw: a high-speed train, a multiple unit, or a locomotive and what it hauls. */
+  kind?: 'high-speed' | 'unit' | 'loco';
+  traction?: 'electric' | 'diesel';
   /** Timetabled maximum speed. */
   maxMph?: number;
   /** Planned trailing load of a locomotive-hauled train. */
   tonnes?: number;
-  /** "First class", "Trolley", "Sleeper", ... */
-  features: string[];
+  features: Feature[];
+}
+
+export type FeatureId = 'first' | 'sleeper' | 'buffet' | 'trolley' | 'hot-food' | 'restaurant' | 'meal' | 'reservations' | 'bike';
+export interface Feature {
+  id: FeatureId;
+  label: string;
 }
 
 const POWER: Record<string, string> = {
@@ -52,24 +60,38 @@ const BRANDS: Record<string, string> = {
   'TP 802': 'Nova 1', 'HT 802': 'Paragon', 'VT 805': 'Evero', 'VT 807': 'Evero', 'EM 810': 'Aurora',
 };
 
-const CATERING: Record<string, string> = {
-  C: 'Buffet', F: 'First class restaurant', H: 'Hot food', M: 'First class meal', R: 'Restaurant', T: 'Trolley',
+const CATERING: Record<string, Feature> = {
+  C: { id: 'buffet', label: 'Buffet' },
+  F: { id: 'restaurant', label: 'First class restaurant' },
+  H: { id: 'hot-food', label: 'Hot food' },
+  M: { id: 'meal', label: 'First class meal' },
+  R: { id: 'restaurant', label: 'Restaurant' },
+  T: { id: 'trolley', label: 'Trolley' },
 };
 // Only the ones that stop you boarding; "recommended" and "possible" are noise.
-const RESERVATIONS: Record<string, string> = { A: 'Reservations required', E: 'Bike reservations required' };
+const RESERVATIONS: Record<string, Feature> = {
+  A: { id: 'reservations', label: 'Reservations required' },
+  E: { id: 'bike', label: 'Bike reservations required' },
+};
+
+// Classes drawn with a streamlined nose.
+const HIGH_SPEED = /^(220|221|222|373|374|390|395|80\d|810|220\/221)$/;
 
 export function describeService(info: ScheduleInfo | undefined): ServiceDetails | undefined {
   const c = info?.service;
   if (!c) return undefined;
   const hauled = c.power === 'D' || c.power === 'E' || c.power === 'ED';
   const features = [
-    c.seating === 'B' ? 'First class' : undefined,
-    c.sleepers ? 'Sleeper' : undefined,
+    c.seating === 'B' ? { id: 'first', label: 'First class' } as const : undefined,
+    c.sleepers ? { id: 'sleeper', label: 'Sleeper' } as const : undefined,
     ...[...(c.catering ?? '')].map((k) => CATERING[k]),
     RESERVATIONS[c.reservations ?? ''],
-  ].filter((f): f is string => Boolean(f));
+  ].filter((f): f is Feature => Boolean(f));
+  const cls = classOf(c);
   const details: ServiceDetails = {
-    stock: stockOf(c, info.atoc),
+    stock: cls ? classLabel(cls, info.atoc) : c.power && POWER[c.power],
+    kind: c.power === 'HST' || (cls && HIGH_SPEED.test(cls)) ? 'high-speed' : hauled || c.power === 'EML' ? 'loco' : c.power ? 'unit' : undefined,
+    traction: c.power === 'E' || c.power === 'EMU' || c.power === 'EML' ? 'electric' : c.power ? 'diesel' : undefined,
     maxMph: Number(c.speed) || undefined,
     tonnes: hauled ? Number(c.timingLoad) || undefined : undefined,
     features,
@@ -77,13 +99,14 @@ export function describeService(info: ScheduleInfo | undefined): ServiceDetails 
   return details.stock || details.maxMph || features.length ? details : undefined;
 }
 
-function stockOf(c: ServiceCodes, atoc: string): string | undefined {
+function classOf(c: ServiceCodes): string | undefined {
   const load = c.timingLoad ?? '';
-  const cls =
-    c.power === 'EMU' ? EMU_LOADS[load] ?? (/^\d{3}$/.test(load) ? load : undefined)
-    : c.power === 'DMU' || c.power === 'DEM' ? DMU_LOADS[load] ?? (/^\d{3}$/.test(load) ? load : undefined)
-    : undefined;
-  if (!cls) return c.power && POWER[c.power];
+  if (c.power === 'EMU') return EMU_LOADS[load] ?? (/^\d{3}$/.test(load) ? load : undefined);
+  if (c.power === 'DMU' || c.power === 'DEM') return DMU_LOADS[load] ?? (/^\d{3}$/.test(load) ? load : undefined);
+  return undefined;
+}
+
+function classLabel(cls: string, atoc: string): string {
   const name = BRANDS[`${atoc} ${cls}`] ?? FAMILIES[cls];
   return name ? `Class ${cls} ${name}` : `Class ${cls}`;
 }

@@ -292,11 +292,61 @@ function titleHtml(t) {
   return `${badge}<span class="hc">${escapeHtml(t.headcode)}</span>${delay ? `<span class="badge ${category(t)}">${delay}</span>` : ''}`;
 }
 
-/** "Class 390 Pendolino · 125 mph · First class · Trolley", from the train's schedule. */
-function serviceHtml(s) {
+// ---- Train type: a side view of the kind of train, its class, and facility icons ----
+
+const WHITE = 'fill="#fff" fill-opacity=".85"';
+const wheels = (xs) => xs.map((x) => `<circle cx="${x}" cy="21.5" r="2" fill="#1d2330"/>`).join('');
+const pantograph = (x) => `<path d="M${x} 7l5-4.5 5 4.5M${x + 2} 2.5h6" fill="none" stroke="#1d2330" stroke-width="1.2" stroke-linejoin="round"/>`;
+const coach = (x, w) => `<rect x="${x}" y="7" width="${w}" height="12" rx="2"/><rect x="${x + 4}" y="10" width="${w - 8}" height="3.2" rx="1" ${WHITE}/>`;
+
+/** Front to the right; drawn in the operator's colour. 112 x 26. */
+function trainArt(s, freight) {
+  const electric = s.traction === 'electric';
+  if (s.kind === 'loco') {
+    const loco = `<path d="M66 6h37a3 3 0 0 1 3 3v10H66z"/><rect x="101.5" y="8.5" width="3" height="4" rx=".8" ${WHITE}/>`
+      + `<rect x="67.5" y="8.5" width="3" height="4" rx=".8" ${WHITE}/><rect x="74" y="9" width="22" height="2" rx="1" fill="#fff" fill-opacity=".3"/>`
+      + wheels([71, 77, 95, 101]) + (electric ? pantograph(80) : '');
+    const hauled = freight
+      ? [2, 34].map((x) => `<rect x="${x}" y="16" width="29" height="3" fill="#475467"/><rect x="${x + 2}" y="9" width="25" height="7" rx="1" fill="#98a2b3"/>`).join('') + wheels([7, 26, 39, 58])
+      : coach(2, 29) + coach(34, 29) + wheels([7, 26, 39, 58]);
+    return hauled + loco;
+  }
+  const lead = s.kind === 'high-speed'
+    ? `<path d="M55 7h33c8 0 15 4 20 10v2H55z"/><rect x="59" y="10" width="27" height="3.2" rx="1" ${WHITE}/><path d="M92 9.2c4.3.9 8 3.2 10.6 6.3H96z" ${WHITE}/>`
+    : `<path d="M55 7h47a4 4 0 0 1 4 4v8H55z"/><rect x="59" y="10" width="38" height="3.2" rx="1" ${WHITE}/><rect x="101.5" y="9.5" width="3" height="4" rx=".8" ${WHITE}/>`;
+  const roof = electric ? pantograph(68) : s.traction === 'diesel' && s.kind !== 'high-speed' ? '<rect x="74" y="5" width="4" height="2" rx=".5"/>' : '';
+  return coach(2, 50) + lead + roof + wheels([9, 15, 39, 45, 62, 68, 92, 98]);
+}
+
+// Facility icons, 16 x 16, stroked.
+const FACILITY_ICONS = {
+  cup: 'M3 6h8v3.5A3.5 3.5 0 0 1 7.5 13h-1A3.5 3.5 0 0 1 3 9.5zM11 7.5h1a1.75 1.75 0 0 1 0 3.5h-1.2M5.5 2.5V4M8.5 2.5V4',
+  cutlery: 'M4.5 2v4a1.5 1.5 0 0 0 3 0V2M6 6v8M11.5 14V2c-1.7 1-2.5 3-2.5 5.5 0 1 .5 1.5 1.5 1.5h1',
+  bed: 'M1.5 12.5V4M1.5 9.5h13v3M14.5 9.5v-1a2 2 0 0 0-2-2H7v3M4.25 6.25a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5',
+  ticket: 'M2 4h12v2.5a1.5 1.5 0 0 0 0 3V12H2V9.5a1.5 1.5 0 0 0 0-3zM9.5 4.5v1.5M9.5 7.25v1.5M9.5 10v1.5',
+  bike: 'M4 13.25a2.75 2.75 0 1 1 0-5.5 2.75 2.75 0 0 1 0 5.5M12 13.25a2.75 2.75 0 1 1 0-5.5 2.75 2.75 0 0 1 0 5.5M4 10.5 6.5 6h4.5l1 4.5M6.5 6l2 4.5L11 6M5.5 4.5h2',
+};
+const ICON_OF = { buffet: 'cup', trolley: 'cup', 'hot-food': 'cup', restaurant: 'cutlery', meal: 'cutlery', sleeper: 'bed', reservations: 'ticket', bike: 'bike' };
+
+function facilitiesHtml(features) {
+  const icons = new Map(); // icon -> labels, so a buffet and a trolley share one cup
+  let first = '';
+  for (const f of features) {
+    if (f.id === 'first') first = '<span class="fac-first" title="First class">1st</span>';
+    else if (ICON_OF[f.id]) icons.set(ICON_OF[f.id], [...(icons.get(ICON_OF[f.id]) ?? []), f.label]);
+  }
+  return first + [...icons].map(([icon, labels]) => {
+    const label = escapeHtml(labels.join(', '));
+    return `<span class="fac" role="img" aria-label="${label}" title="${label}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${FACILITY_ICONS[icon]}"/></svg></span>`;
+  }).join('');
+}
+
+/** The train-type card: side view, class, top speed (or load) and facilities. */
+function stockHtml(t, s) {
   if (!s) return '';
-  const rest = [s.maxMph && `${s.maxMph} mph`, s.tonnes && `${s.tonnes.toLocaleString('en-GB')} t`, ...s.features].filter(Boolean);
-  return [s.stock && `<b>${escapeHtml(s.stock)}</b>`, ...rest.map((r) => `<span>${escapeHtml(r)}</span>`)].filter(Boolean).join(' · ');
+  const art = s.kind ? `<svg class="stock-art" viewBox="0 0 112 26" style="color:${escapeHtml(badgeOf(t).color)}" aria-hidden="true"><g fill="currentColor">${trainArt(s, t.freight)}</g></svg>` : '';
+  const facts = [s.maxMph && `${s.maxMph} mph`, s.tonnes && `${s.tonnes.toLocaleString('en-GB')} t`].filter(Boolean).map((f) => `<span>${f}</span>`).join('');
+  return `${art}<div class="stock-text"><div class="stock-name">${escapeHtml(s.stock ?? '')}</div><div class="stock-sub">${facts}${facilitiesHtml(s.features)}</div></div>`;
 }
 
 function detailFor(t) {
@@ -354,7 +404,7 @@ function select(id) {
   setRoute(null);
   $('d-calls').replaceChildren();
   setHtml($('d-note'), '');
-  setHtml($('d-service'), '');
+  setHtml($('d-stock'), '');
   renderDetailHead(t);
   $('browse').hidden = true;
   $('detail').hidden = false;
@@ -499,30 +549,48 @@ function fitRoute() {
 function renderDetailHead(t) {
   $('d-title').innerHTML = titleHtml(t);
   $('d-route').textContent = routeLabel(t);
-  renderSpeed(t);
 }
+
+// ---- Callout: the selected train's speed and next stop, beside it on the map ----
+
+const callout = document.createElement('div');
+callout.className = 'callout';
+let calloutMarker = null;
 
 // No public feed gives real speeds (no GPS), so the figure is an average over
 // the section; the tooltip says how it was worked out.
-function renderSpeed(t) {
-  let value = '—';
-  let sub = '';
-  let tip = '';
-  if (t.state === 'stopped') {
-    value = 'Standing';
-  } else if (t.state === 'moving' && t.speedKmh) {
-    value = `≈ ${t.speedKmh} km/h`;
-    tip = t.mode
-      ? 'Average over this section, from TfL arrival predictions.'
-      : 'Average over this section, from its scheduled running time.';
+function speedOf(t) {
+  if (t.state !== 'moving') return null;
+  const measured = t.measuredKmh ? `Measured ${t.measuredKmh} km/h over ${t.measuredSection}, from actual report times.` : '';
+  if (t.speedKmh) {
+    const how = t.mode ? 'Average over this section, from TfL arrival predictions.' : 'Average over this section, from its scheduled running time.';
+    return { text: `≈ ${t.speedKmh} km/h`, tip: `${how} ${measured}`.trim() };
   }
-  if (t.measuredKmh) {
-    sub = `${t.measuredKmh} km/h measured`;
-    tip += `${tip ? ' ' : ''}Measured ${t.measuredKmh} km/h over ${t.measuredSection}, from actual report times.`;
+  return t.measuredKmh ? { text: `${t.measuredKmh} km/h`, tip: measured } : null;
+}
+
+function calloutHtml(t, d, now) {
+  if (t.state === 'terminated') return `<b>Terminated</b><span>${escapeHtml(t.from.name)}</span>`;
+  if (t.state === 'stopped') return `<b>Standing</b><span>${escapeHtml((d?.current ?? d?.previous)?.name ?? t.from.name)}</span>`;
+  const tfl = Boolean(t.mode);
+  const speed = speedOf(t);
+  const next = d?.next?.name ?? t.to?.name;
+  const exp = d?.next && expectedOf(d.next, t.delayMin);
+  const when = exp ? (tfl ? `${minutesUntil(exp, now)} min` : hhmm(exp)) : '';
+  return (speed ? `<b title="${escapeHtml(speed.tip)}">${speed.text}</b>` : '')
+    + (next ? `<span>→ ${escapeHtml(next)}${when ? ` <i${!tfl && t.delayMin > 0 ? ' class="late"' : ''}>${when}</i>` : ''}</span>` : '');
+}
+
+function renderCallout(t, now) {
+  if (!t || !visible(t)) {
+    calloutMarker?.remove();
+    calloutMarker = null;
+    return;
   }
-  $('d-speed').textContent = value;
-  $('d-speed-sub').textContent = sub;
-  $('d-speed-box').title = tip;
+  const pos = positionOf(t, now);
+  if (!calloutMarker) calloutMarker = new maplibregl.Marker({ element: callout, anchor: 'left', offset: [14, 0] }).setLngLat(pos).addTo(map);
+  else calloutMarker.setLngLat(pos);
+  setHtml(callout, calloutHtml(t, detailFor(t), now));
 }
 
 function timeOf(s, kind) {
@@ -544,23 +612,7 @@ function renderDetail(d, scroll) {
   const now = serverNow();
   renderDetailHead(t);
 
-  // Where it is: the next stop while moving, else the station it is at.
-  let label = 'Next';
-  let place = d.next?.name ?? t.to?.name ?? '—';
-  let when = '';
-  if (t.state !== 'moving') {
-    label = t.state === 'terminated' ? 'Terminated' : 'At';
-    place = (d.current ?? d.previous)?.name ?? t.from.name;
-  } else if (d.next) {
-    const exp = expectedOf(d.next, t.delayMin);
-    if (exp) when = tfl ? `in ${minutesUntil(exp, now)} min` : hhmm(exp);
-  }
-  $('d-where-lbl').textContent = label;
-  $('d-where').textContent = place;
-  $('d-where-time').textContent = when;
-  $('d-where-time').classList.toggle('late', !tfl && t.delayMin > 0);
-
-  setHtml($('d-service'), serviceHtml(d.service));
+  setHtml($('d-stock'), stockHtml(t, d.service));
   const status = tfl ? lineStatusOf(t.line) : null;
   setHtml($('d-note'), status
     ? disruptionHtml(t.line, status, false)
@@ -736,6 +788,7 @@ function render() {
     drawRouteLine(now);
     if (following && !map.isMoving()) map.jumpTo({ center: positionOf(sel, now), padding: mapPadding() });
   }
+  renderCallout(sel, now);
   renderConnection(now);
 }
 

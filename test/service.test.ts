@@ -8,9 +8,11 @@ describe('describeService', () => {
   it('names the unit class from the timing load, with top speed and facilities', () => {
     expect(describeService(info('VT', { power: 'EMU', timingLoad: '390', speed: '125', seating: 'B', catering: 'T', reservations: 'S' }))).toEqual({
       stock: 'Class 390 Pendolino',
+      kind: 'high-speed',
+      traction: 'electric',
       maxMph: 125,
       tonnes: undefined,
-      features: ['First class', 'Trolley'],
+      features: [{ id: 'first', label: 'First class' }, { id: 'trolley', label: 'Trolley' }],
     });
   });
 
@@ -31,6 +33,8 @@ describe('describeService', () => {
   it('gives the planned load of a hauled train, never a class', () => {
     expect(describeService(info('ZZ', { power: 'D', timingLoad: '1600', speed: '060' }))).toEqual({
       stock: 'Diesel locomotive',
+      kind: 'loco',
+      traction: 'diesel',
       maxMph: 60,
       tonnes: 1600,
       features: [],
@@ -38,13 +42,25 @@ describe('describeService', () => {
   });
 
   it('lists sleepers, catering and compulsory reservations', () => {
-    expect(describeService(info('CS', { power: 'E', seating: 'B', sleepers: 'B', catering: 'CF', reservations: 'A' }))?.features).toEqual([
+    expect(describeService(info('CS', { power: 'E', seating: 'B', sleepers: 'B', catering: 'CF', reservations: 'A' }))?.features.map((f) => f.label)).toEqual([
       'First class',
       'Sleeper',
       'Buffet',
       'First class restaurant',
       'Reservations required',
     ]);
+  });
+
+  it('says what to draw: high-speed train, multiple unit or locomotive, electric or diesel', () => {
+    const kind = (atoc: string, c: ServiceCodes) => {
+      const s = describeService(info(atoc, c));
+      return `${s?.kind} ${s?.traction}`;
+    };
+    expect(kind('TL', { power: 'EMU', timingLoad: '700' })).toBe('unit electric');
+    expect(kind('NT', { power: 'DMU', timingLoad: 'S' })).toBe('unit diesel');
+    expect(kind('XC', { power: 'DMU', timingLoad: 'V' })).toBe('high-speed diesel');
+    expect(kind('SR', { power: 'HST' })).toBe('high-speed diesel');
+    expect(kind('CS', { power: 'E' })).toBe('loco electric');
   });
 
   it('says nothing without codes', () => {
