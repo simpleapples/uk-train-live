@@ -17,6 +17,16 @@ export interface Place extends Station {
   key: string;
 }
 
+// Operator and depot abbreviations keep their capitals ("Tonbridge West Yard GBRf").
+const ABBREVIATIONS: Record<string, string> = {
+  GBRF: 'GBRf', DBC: 'DBC', DBS: 'DBS', EWS: 'EWS', DRS: 'DRS', FLT: 'FLT', LUL: 'LUL', DLR: 'DLR', TMD: 'TMD', LMD: 'LMD', EMD: 'EMD',
+};
+
+/** Upper-case CORPUS and timetable names ("ROTHERHAM CENTRAL") in title case. */
+export function titleCase(s: string): string {
+  return s.trim().toLowerCase().replace(/\b[a-z][a-z0-9]*/g, (w) => ABBREVIATIONS[w.toUpperCase()] ?? w[0].toUpperCase() + w.slice(1));
+}
+
 export class LocationIndex {
   #places = new Map<string, Place>();
   #names = new Map<string, string>();
@@ -37,8 +47,7 @@ export class LocationIndex {
     for (const [code, entry] of Object.entries(stanox)) {
       const tiploc = entry.tiplocs.find((t) => stations[t]);
       if (tiploc) index.add(code, stations[tiploc]);
-      // CORPUS names are upper case ("ROTHERHAM CENTRAL").
-      else if (entry.name) index.#names.set(code, entry.name.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()));
+      else if (entry.name) index.#names.set(code, titleCase(entry.name));
     }
     return index;
   }

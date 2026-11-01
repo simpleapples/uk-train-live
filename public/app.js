@@ -299,7 +299,7 @@ function detailFor(t) {
 /** "Origin → Destination" when the whole route is known. */
 function routeLabel(t) {
   // Rail: first and last passenger stops, from the train's schedule.
-  if (t.origin && t.destination) return `${t.origin} → ${t.destination}`;
+  if (t.origin && t.destination) return t.origin === t.destination ? `Round trip from ${t.origin}` : `${t.origin} → ${t.destination}`;
   const d = detailFor(t);
   if (!d?.stops.length) return t.destination ? `To ${t.destination}` : '';
   if (!d.timetabled) return `From ${d.stops[0].name}`;

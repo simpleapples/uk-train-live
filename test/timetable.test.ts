@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { titleCase } from '../src/engine/locations.ts';
 import { londonDate, londonTime, Timetable } from '../src/schedule/timetable.ts';
 
 // 2026-10-31 is a Saturday, in GMT (London = UTC).
@@ -124,6 +125,12 @@ describe('London time', () => {
   it('converts timetable times in summer time and in winter', () => {
     expect(londonTime('2026-07-01', 12 * 60 * 2)).toBe(Date.UTC(2026, 6, 1, 11, 0));
     expect(londonTime(DAY, 12 * 60 * 2)).toBe(NOON);
+  });
+
+  it('writes upper-case names in title case, keeping operator abbreviations', () => {
+    expect(titleCase('TONBRIDGE WEST YARD GBRF')).toBe('Tonbridge West Yard GBRf');
+    expect(titleCase('ST MARY CRAY JN')).toBe('St Mary Cray Jn');
+    expect(titleCase('ABERDEEN WATERLOO (GBRF)')).toBe('Aberdeen Waterloo (GBRf)');
   });
 
   it('gives the London date of an instant', () => {

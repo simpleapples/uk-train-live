@@ -9,6 +9,7 @@
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
+import { titleCase } from '../engine/locations.ts';
 import type { PlannedStop } from '../feeds/feed.ts';
 
 /** What the train store needs to know about a train's schedule. */
@@ -252,6 +253,7 @@ export class Timetable implements ScheduleLookup {
 export interface ScheduleLookup {
   byUid(uid: string, date: string): ScheduleInfo | undefined;
   match(headcode: string, key: string, plannedMs: number): ScheduleInfo | undefined;
+  plannedStops?(uid: string, date: string): PlannedStop[] | undefined;
 }
 
 /** "HHMM" or "HHMMH" (half past the minute) -> half-minutes after midnight. */
@@ -272,10 +274,6 @@ function lastTime(stops: Int32Array): number {
 /** Monday = 0, as in schedule_days_runs. */
 function weekdayIndex(date: string): number {
   return (new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7;
-}
-
-function titleCase(s: string): string {
-  return s.trim().toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 }
 
 // ---- London time ----

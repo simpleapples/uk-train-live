@@ -5,6 +5,7 @@
 // `next_report_stanox`, taking `next_report_run_time` minutes. The browser
 // interpolates along that segment; the server only sends segment changes.
 
+import type { PlannedStop } from '../feeds/feed.ts';
 import type { ScheduleInfo, ScheduleLookup } from '../schedule/timetable.ts';
 import type { LocationIndex, Place } from './locations.ts';
 import {
@@ -115,6 +116,8 @@ const MAX_HISTORY = 150;
 
 const TERMINATED_LINGER_MS = 2 * 60_000;
 const STALE_AFTER_MS = 30 * 60_000;
+// How far a report's planned time may be from the timetable's for the same place.
+const PLANNED_TOLERANCE_MS = 2 * 60_000;
 // TRUST timestamps have been seen in UK local time rather than UTC, which
 // puts them an hour in the future during BST.
 const BST_SKEW_MS = 60 * 60_000;
@@ -227,6 +230,16 @@ export class TrainStore {
   /** Live mode: schedules give trains their origin, destination and operator. Swapped daily. */
   setTimetable(timetable: ScheduleLookup | null): void {
     this.#timetable = timetable;
+    // Trains restored from a snapshot carry their schedule as described then.
+    for (const rec of this.#trains.values()) {
+      const s = rec.schedule;
+      const fresh = s && timetable?.byUid(s.uid, s.date);
+      if (!fresh) continue;
+      rec.schedule = fresh;
+      if (!rec.view) continue;
+      rec.view = { ...rec.view, operator: this.#operatorName(rec.toc, fresh.atoc), origin: fresh.origin, destination: fresh.destination };
+      this.#changed.add(rec.id);
+    }
   }
 
   /** Which schedule a train runs to, once known. */
@@ -311,8 +324,11 @@ export class TrainStore {
     };
     const next = this.#locations.get(body.next_report_stanox);
     const runMin = Number(body.next_report_run_time);
+    // Stations report an arrival for trains running through as well: if the
+    // timetable has the train passing here, it has not stopped.
+    const passing = body.event_type === 'ARRIVAL' && rec.view?.state === 'moving' && this.#passesAt(rec, here.key, Number(body.planned_timestamp));
     // Reports at unplaced timing points are almost always passes.
-    const running = body.event_type === 'DEPARTURE' || !placed;
+    const running = body.event_type === 'DEPARTURE' || !placed || passing;
 
     if (body.train_terminated === 'true' || body.planned_event_type === 'DESTINATION') {
       rec.view = { ...base, state: 'terminated', to: null, runMs: 0, speedKmh: 0 };
@@ -327,7 +343,7 @@ export class TrainStore {
       }
       const runMs = at + runMin * 60_000 - departedAt;
       rec.view = { ...base, departedAt, state: 'moving', to: next, runMs, speedKmh: this.#speedKmh(here.key, next.key, runMs) };
-    } else if (placed) {
+    } else if (placed && !passing) {
       const toward = next && next.key !== here.key ? next.key : undefined;
       rec.view = { ...base, state: 'stopped', to: null, runMs: 0, speedKmh: 0, toward };
     } else {
@@ -354,6 +370,23 @@ export class TrainStore {
     if (Number.isFinite(planned) && planned > 0) {
       rec.schedule = timetable.match(rec.headcode ?? headcodeOf(rec.id), body.loc_stanox, planned);
     }
+  }
+
+  /**
+   * The train's schedule runs through `key` without stopping at about
+   * `plannedMs`. By time as well as place: a train may pass one place several
+   * times (railhead treatment trains go out and back along each line).
+   */
+  #passesAt(rec: TrainRecord, key: string, plannedMs: number): boolean {
+    const s = rec.schedule;
+    const stops = s && Number.isFinite(plannedMs) ? this.#timetable?.plannedStops?.(s.uid, s.date) : undefined;
+    let best: PlannedStop | undefined;
+    let gap = PLANNED_TOLERANCE_MS;
+    for (const p of stops ?? []) {
+      const g = p.key === key ? Math.abs((p.arr ?? p.dep ?? Infinity) - plannedMs) : Infinity;
+      if (g <= gap) [best, gap] = [p, g];
+    }
+    return Boolean(best && !best.call && best.arr === undefined);
   }
 
   #record(rec: TrainRecord, body: MovementBody, at: number, delayMin: number): void {

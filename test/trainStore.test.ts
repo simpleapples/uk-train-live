@@ -86,6 +86,45 @@ describe('TrainStore', () => {
       expect(store.snapshot()[0]).toMatchObject({ operator: 'Great Northern', destination: 'Peterborough' });
     });
 
+    it('keeps a train running through a station it passes, despite the arrival report', () => {
+      const plan = (stevenage: { arr?: number; dep: number; call: boolean }) => ({
+        ...timetable,
+        plannedStops: () => [
+          { key: '87701', call: true, dep: T0 },
+          { key: '86021', ...stevenage },
+          { key: '70011', call: true, arr: T0 + 45 * 60_000 },
+        ],
+      });
+      const arrive = movement({ toc_id: '88', event_type: 'ARRIVAL', loc_stanox: '86021', planned_timestamp: String(T0 + 20 * 60_000), next_report_stanox: '70011', next_report_run_time: '25' });
+
+      const passing = new TrainStore(index, names);
+      passing.setTimetable(plan({ dep: T0 + 20 * 60_000, call: false }));
+      passing.apply(activation('C10001'), T0 - 60_000);
+      passing.apply(movement({ toc_id: '88' }), T0);
+      passing.apply(arrive, T0 + 20 * 60_000);
+      expect(passing.snapshot()[0]).toMatchObject({ state: 'moving', to: { key: '70011' } });
+
+      const stopping = new TrainStore(index, names);
+      stopping.setTimetable(plan({ arr: T0 + 19 * 60_000, dep: T0 + 21 * 60_000, call: true }));
+      stopping.apply(activation('C10001'), T0 - 60_000);
+      stopping.apply(movement({ toc_id: '88' }), T0);
+      stopping.apply(arrive, T0 + 20 * 60_000);
+      expect(stopping.snapshot()[0].state).toBe('stopped');
+    });
+
+    it('describes restored trains from a newly loaded timetable', () => {
+      const before = new TrainStore(index, names);
+      before.setTimetable({ ...timetable, byUid: () => ({ ...info, destination: 'Old Name' }) });
+      before.apply(activation('C10001'), T0 - 60_000);
+      before.apply(movement({ toc_id: '88' }), T0);
+      const after = new TrainStore(index, names);
+      after.importState(JSON.parse(JSON.stringify(before.exportState(T0))), T0);
+      after.drainChanges();
+      after.setTimetable(timetable);
+      expect(after.scheduleOf('871S12MO31')?.destination).toBe('Peterborough');
+      expect(after.drainChanges().upserts).toMatchObject([{ destination: 'Peterborough' }]);
+    });
+
     it('falls back to the TRUST operator code without a schedule', () => {
       const store = new TrainStore(index, names);
       store.setTimetable(timetable);
