@@ -59,6 +59,9 @@ export const TOC_NAMES: Record<string, string> = {
   '62': 'Fishbone Solutions',
   '64': 'Merseyrail',
   '65': 'Avanti West Coast',
+  // Not in the published table. Inferred: its trains share a service code with
+  // intermodal trains between Freightliner terminals (4S49 Daventry-Grangemouth).
+  '66': 'Freightliner',
   '71': 'Transport for Wales',
   '72': 'Legge Infrastructure Services',
   '74': 'Chiltern Railways',
