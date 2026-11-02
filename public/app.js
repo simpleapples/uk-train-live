@@ -624,6 +624,8 @@ function expectedOf(s, delayMin) {
 }
 
 const minutesUntil = (ms, now) => Math.max(0, Math.round((ms - now) / 60_000));
+// Beside a stop the map cannot show: its route stops short of it.
+const NO_POSITION = '<svg class="c-nopos" viewBox="0 0 16 16" data-tip="Not on the map: no published position" aria-label="Not on the map"><path d="M8 14s4.5-4.2 4.5-7.5a4.5 4.5 0 0 0-8.6-1.8M3.6 6.9C4 9.9 8 14 8 14M2.5 2.5l11 11"/></svg>';
 
 function renderDetail(d, scroll) {
   const t = trains.get(d.train.id) ?? d.train;
@@ -664,7 +666,7 @@ function renderDetail(d, scroll) {
     items.push(`<li class="call ${s.status}">
       <span class="c-time">${left}</span>
       <span class="c-dot"></span>
-      <span class="c-name">${escapeHtml(s.name)}</span>
+      <span class="c-name">${escapeHtml(s.name)}${s.lat === undefined && !tfl ? NO_POSITION : ''}</span>
       <span class="c-rt${late ? ' late' : ''}">${escapeHtml(right)}</span>
     </li>`);
     // The train itself, between the stop it left and the next one.

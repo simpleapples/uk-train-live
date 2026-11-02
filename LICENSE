@@ -22,5 +22,5 @@ SOFTWARE.
 
 The data files in data/ are not covered by this licence; see "Data and
 licences" in README.md. The track geometry files (data/track.json.gz,
-data/tfl-track.json.gz) are derived from OpenStreetMap and available under the
-Open Database License (ODbL).
+data/tfl-track.json.gz) and data/timing-points.json are derived in whole or part
+from OpenStreetMap and available under the Open Database License (ODbL).

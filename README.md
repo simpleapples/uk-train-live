@@ -142,7 +142,8 @@ npm run data:stations   # NaPTAN stations → data/stations.json
 npm run data:track      # OSM rail graph from OpenFreeMap tiles → data/track.json.gz
 npm run data:tfl        # TfL lines, stations and per-line track → data/tfl*.json*
 npm run data:tfl-loads  # typical TfL train loads (NUMBAT) → data/tfl-loads.json.gz
-npm run data:timing-points  # junctions, yards and signals (BPLAN) → data/timing-points.json
+npm run data:timing-points  # junctions, yards and signals (BPLAN, OSM) → data/timing-points.json
+npm run data:audit      # check positions against the timetable and the track
 ```
 
 </details>
@@ -150,7 +151,7 @@ npm run data:timing-points  # junctions, yards and signals (BPLAN) → data/timi
 ## ⚠️ Limitations
 
 - **Positions are estimates**, interpolated between reports along the track. They are not GPS.
-- **TRUST only reports at timing points**, which can be several kilometres apart. Junctions, yards and signals are placed from Network Rail's planning data (BPLAN, last published in 2024); about half have a grid reference, most of the rest are placed between their neighbours, and the few left are bridged from the last known place.
+- **TRUST only reports at timing points**, which can be several kilometres apart. Junctions, yards and signals are placed from Network Rail's planning data (BPLAN, last published in 2024), whose grid references are often placeholders: each is checked against its neighbours and the timetable, and the rest are placed on the track between neighbours, or at a place of that name in OpenStreetMap. 99% of timetabled stops have a position; the rest, mostly sidings, are marked in the stop list and the route stops short of them. `npm run data:audit` reports what is left. Metro lines are not on the rail map, so their routes are straight between stops.
 - **Speeds are section averages**: estimated from the timetable or TfL predictions, and measured between reports. They are not instantaneous.
 - **TfL crowding is typical, not live.** It comes from TfL's NUMBAT model of an average day, per section and quarter hour.
 - **OpenRailwayMap's public tiles** are fine for a prototype. A busy public site should host its own.
@@ -184,7 +185,7 @@ The code is [MIT](LICENSE). The data it uses comes with its own terms, and the a
 | Train movements, timetable, CORPUS | [Network Rail Open Data](https://publicdatafeeds.networkrail.co.uk) | Network Rail data feeds licence: *"Contains information of Network Rail Infrastructure Limited licensed under the Network Rail data feeds licence."* No Network Rail, National Rail or train company logos; operators are shown as text badges. |
 | Tube, Overground, Elizabeth line, DLR | [TfL Unified API](https://api-portal.tfl.gov.uk) | *Powered by TfL Open Data.* Contains OS data © Crown copyright and database rights. |
 | Typical train loads (`data/tfl-loads.json.gz`) | [TfL NUMBAT](https://crowding.data.tfl.gov.uk) | *Powered by TfL Open Data.* |
-| Junction, yard and signal positions (`data/timing-points.json`) | Network Rail BPLAN geography, via the [Open Rail Data wiki](https://wiki.openraildata.com/index.php/BPLAN_Geography_Data) | *Contains information of Network Rail Infrastructure Limited.* |
+| Junction, yard and signal positions (`data/timing-points.json`) | Network Rail BPLAN geography, via the [Open Rail Data wiki](https://wiki.openraildata.com/index.php/BPLAN_Geography_Data); depots and metro stops from OpenStreetMap | *Contains information of Network Rail Infrastructure Limited.* © OpenStreetMap contributors, [ODbL](https://opendatacommons.org/licenses/odbl/). |
 | Station locations (`data/stations.json`) | NaPTAN, Department for Transport | Open Government Licence v3.0 |
 | Track geometry (`data/track.json.gz`, `data/tfl-track.json.gz`) | © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, via [OpenFreeMap](https://openfreemap.org) / OpenMapTiles and Overpass | [ODbL](https://opendatacommons.org/licenses/odbl/) |
 | Basemap and rail overlay | [OpenFreeMap](https://openfreemap.org), [OpenRailwayMap](https://www.openrailwaymap.org) | © OpenMapTiles © OpenStreetMap contributors; CC-BY-SA |

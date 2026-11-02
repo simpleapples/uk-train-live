@@ -20,10 +20,11 @@
     "live": "FEED=nrod node src/server.ts",
     "data:stations": "node scripts/build-stations.ts",
     "data:corpus": "node scripts/fetch-corpus.ts",
-    "data:track": "node --max-old-space-size=6144 scripts/build-track.ts",
+    "data:track": "node --max-old-space-size=6144 scripts/build-track.ts && node --max-old-space-size=6144 scripts/heal-track.ts",
     "data:tfl": "node scripts/build-tfl.ts",
     "data:tfl-loads": "node scripts/build-tfl-loads.ts",
     "data:timing-points": "node scripts/build-timing-points.ts",
+    "data:audit": "node --max-old-space-size=4096 scripts/audit-locations.ts",
     "typecheck": "tsc",
     "test": "vitest run"
   },

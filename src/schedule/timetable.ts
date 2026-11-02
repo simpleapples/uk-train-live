@@ -231,6 +231,11 @@ export class Timetable implements ScheduleLookup {
     return this.#byUid.size;
   }
 
+  /** Every schedule kept, as [uid, date]. */
+  schedules(): [uid: string, date: string][] {
+    return [...this.#byUid.values()].map((s) => [s.uid, s.date]);
+  }
+
   /** The schedule a TRUST activation names (train_uid, and the date it starts). */
   byUid(uid: string, date: string): ScheduleInfo | undefined {
     const s = this.#byUid.get(`${uid}|${date}`);

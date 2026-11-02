@@ -163,7 +163,7 @@ describe('TrainStore', () => {
       '87701': { tiplocs: ['KNGX'] },
       '86021': { tiplocs: ['STEVNGE'] },
       '86099': { tiplocs: ['WYMONDJ'], name: 'WYMONDLEY JN' },
-    }, { WYMONDJ: [-0.23, 51.93] });
+    }, { points: { WYMONDJ: [-0.23, 51.93] }, names: {} });
     const store = new TrainStore(withJunction);
     store.apply(movement({ next_report_stanox: '86099', next_report_run_time: '25' }), T0);
     store.apply(movement({ event_type: 'ARRIVAL', planned_event_type: 'ARRIVAL', loc_stanox: '86099', next_report_stanox: '86021', next_report_run_time: '3' }), T0 + 25 * 60_000);
@@ -181,7 +181,7 @@ describe('TrainStore', () => {
     before.apply(movement({ event_type: 'ARRIVAL', planned_event_type: 'ARRIVAL', loc_stanox: '86099', next_report_stanox: null }), T0 + 60_000);
     expect(before.snapshot()[0]).toMatchObject({ state: 'stopped', from: { name: 'London Kings Cross' } });
     const saved = JSON.parse(JSON.stringify(before.exportState(T0 + 60_000)));
-    const placed = LocationIndex.byStanox(stations, { '87701': { tiplocs: ['KNGX'] }, '86099': { tiplocs: ['WYMONDJ'], name: 'WYMONDLEY JN' } }, { WYMONDJ: [-0.23, 51.93] });
+    const placed = LocationIndex.byStanox(stations, { '87701': { tiplocs: ['KNGX'] }, '86099': { tiplocs: ['WYMONDJ'], name: 'WYMONDLEY JN' } }, { points: { WYMONDJ: [-0.23, 51.93] }, names: {} });
     const after = new TrainStore(placed);
     after.importState(saved, T0 + 2 * 60_000);
     expect(after.snapshot()[0].from.name).toBe('Wymondley Junction');

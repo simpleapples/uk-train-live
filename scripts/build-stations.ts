@@ -41,7 +41,8 @@ for (const line of lines.slice(1)) {
   const f = parseCsvLine(line);
   if (f[iType] !== 'RLY' || f[iStatus] !== 'active' || !f[iAtco].startsWith('9100')) continue;
   const lat = Number(f[iLat]), lon = Number(f[iLon]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+  // A few Elizabeth line platforms come with 0, 0.
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !lat || !lon) continue;
   stations[f[iAtco].slice(4)] = {
     name: f[iName].replace(/\s+Rail Station$/i, ''),
     lat: Math.round(lat * 1e5) / 1e5,

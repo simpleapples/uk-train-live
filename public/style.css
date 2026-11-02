@@ -260,6 +260,7 @@ h1 .logo { flex: none; border-radius: 6px; }
 .call.passed .c-name { color: var(--muted); }
 .call.current .c-dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(40, 86, 214, 0.2); }
 .call.current .c-name { font-weight: 650; }
+.c-nopos { width: 13px; height: 13px; margin-left: 5px; vertical-align: -2px; fill: none; stroke: var(--subtle); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 /* The train, between two stops */
 .call.now { min-height: 16px; }
 .call.now::before { background: linear-gradient(#c0c5cf 50%, var(--accent) 50%); }

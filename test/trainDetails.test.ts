@@ -88,7 +88,7 @@ describe('describeTrain', () => {
       KNGX: { tiplocs: ['KNGX'] },
       WYMONDJ: { tiplocs: ['WYMONDJ'], name: 'WYMONDLEY JN' },
       STEVNGE: { tiplocs: ['STEVNGE'] },
-    }, { WYMONDJ: [-0.2, 51.8] });
+    }, { points: { WYMONDJ: [-0.2, 51.8] }, names: {} });
     const store = new TrainStore(withJunction);
     store.apply(move({ loc_stanox: 'KNGX', next_report_stanox: 'WYMONDJ', next_report_run_time: '15', actual_timestamp: String(T0) }), T0);
     store.apply(move({ loc_stanox: 'WYMONDJ', next_report_stanox: 'STEVNGE', next_report_run_time: '5', actual_timestamp: String(T0 + 15 * 60_000) }), T0);

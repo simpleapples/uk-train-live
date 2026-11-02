@@ -73,7 +73,7 @@ if (feedKind === 'demo') {
   creds = { username: env.NROD_USERNAME, password: env.NROD_PASSWORD };
   // Junctions, yards and signals too, so freight trains can be drawn where they are.
   const timingPointsFile = new URL('../data/timing-points.json', import.meta.url);
-  const timingPoints = existsSync(timingPointsFile) ? (JSON.parse(readFileSync(timingPointsFile, 'utf8')) as TimingPointTable) : {};
+  const timingPoints = existsSync(timingPointsFile) ? (JSON.parse(readFileSync(timingPointsFile, 'utf8')) as TimingPointTable) : undefined;
   locations = LocationIndex.byStanox(stations, await loadStanox(creds), timingPoints);
   operatorName = liveOperatorName;
   feed = new NrodFeed({
